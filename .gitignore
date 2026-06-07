@@ -1,0 +1,10 @@
+node_modules/
+dist/
+ui/dist/
+ui/node_modules/
+*.js.map
+.env
+.env.local
+.DS_Store
+*.db
+*.sqlite
