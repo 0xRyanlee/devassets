@@ -5,7 +5,7 @@ import { checkStripeStatus } from '../integrations/stripe.js';
 import { formatCheckHuman, formatCheckJson } from '../core/formatter.js';
 import { logger } from '../utils/logger.js';
 import { createSpinner } from '../utils/spinner.js';
-import { readEnvValue } from '../utils/dotenv.js';
+import { readProjectEnvValue } from '../core/roots.js';
 import type { PaymentStatus } from '../types/index.js';
 
 interface CheckOptions {
@@ -35,10 +35,10 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     for (const platform of platforms) {
       sp.text = `Checking ${platform.name} status…`;
       if (platform.name === 'paddle') {
-        const key = readEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
+        const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
         paymentStatuses.push(await checkPaddleStatus(projectId, key));
       } else if (platform.name === 'stripe') {
-        const key = readEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
+        const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
         paymentStatuses.push(await checkStripeStatus(projectId, key));
       }
     }

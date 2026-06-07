@@ -1,34 +1,35 @@
-import { scanEnvKeys } from '../utils/dotenv.js';
-import { readEnvValue } from '../utils/dotenv.js';
+import path from 'path';
+import { scanEnvKeys, readEnvValue } from '../utils/dotenv.js';
+import { resolveScanRoots } from './roots.js';
 import { matchProvider } from '../integrations/providers/index.js';
 import { upsertCredentialIdentity, getCredentialIdentities } from '../db/queries.js';
 import type { Project, ProviderIdentity } from '../types/index.js';
 
 export async function resolveProjectIdentities(project: Project): Promise<ProviderIdentity[]> {
-  const keys = scanEnvKeys(project.path);
+  const roots = resolveScanRoots(project.path);
   const seen = new Set<string>();
   const now = new Date().toISOString();
-  const results: ProviderIdentity[] = [];
 
-  for (const key of keys) {
-    if (seen.has(key.name)) continue;
-    const entry = matchProvider(key.name);
-    if (!entry) continue;
-    seen.add(key.name);
+  for (const root of roots) {
+    const rootAbs = path.join(project.path, root);
+    for (const key of scanEnvKeys(rootAbs)) {
+      if (seen.has(key.name)) continue;
+      const entry = matchProvider(key.name);
+      if (!entry) continue;
+      seen.add(key.name);
 
-    const value = readEnvValue(project.path, key.name);
-    if (!value) {
-      results.push({ provider: entry.provider, keyName: key.name, valid: false, error: 'value not set', checkedAt: now });
-      continue;
+      const value = readEnvValue(rootAbs, key.name);
+      if (!value) {
+        const identity: ProviderIdentity = { provider: entry.provider, keyName: key.name, valid: false, error: 'value not set', checkedAt: now };
+        upsertCredentialIdentity(project.id, identity);
+        continue;
+      }
+
+      // value is used transiently here and never persisted
+      const resolved = await entry.resolve(value);
+      upsertCredentialIdentity(project.id, { ...resolved, keyName: key.name, checkedAt: now });
     }
-
-    // value is used transiently here and never persisted
-    const resolved = await entry.resolve(value);
-    const identity: ProviderIdentity = { ...resolved, keyName: key.name, checkedAt: now };
-    upsertCredentialIdentity(project.id, identity);
-    results.push(identity);
   }
 
-  // return cached versions so mismatch (against pinned expectations) is computed
   return getCredentialIdentities(project.id).filter(i => seen.has(i.keyName));
 }

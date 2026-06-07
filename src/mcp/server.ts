@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
-import { readEnvValue } from '../utils/dotenv.js';
+import { readProjectEnvValue } from '../core/roots.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { exportManifest, generateOutputPath } from '../core/exporter.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
@@ -13,7 +13,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.4.2',
+    version: '0.5.0',
   });
 
   server.tool(
@@ -49,10 +49,10 @@ export async function startMcpServer() {
       const paymentStatuses = [];
       for (const p of platforms) {
         if (p.name === 'paddle') {
-          const key = readEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
+          const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
           paymentStatuses.push(await checkPaddleStatus(projectId, key));
         } else if (p.name === 'stripe') {
-          const key = readEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
+          const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
           paymentStatuses.push(await checkStripeStatus(projectId, key));
         }
       }

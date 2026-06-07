@@ -49,6 +49,9 @@ export function scanCommand(projectId: string, options: ScanOptions) {
     }
 
     sp.succeed(`Scan complete: ${project.name}`);
+    if (result.roots.length > 1 || (result.roots[0] && result.roots[0] !== '.')) {
+      logger.raw(`  Roots:     ${result.roots.join(', ')}`);
+    }
     logger.raw(`  Env files: ${result.envFilesFound.join(', ') || 'none'}`);
     logger.raw(`  Assets:    ${result.assets.length}`);
     logger.raw(`  Platforms: ${result.detectedPlatforms.join(', ') || 'none detected'}`);

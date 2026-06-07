@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-06-08
+
+### Features — monorepo support (3-layer scan-root resolution)
+
+`scan`, `check`, and `identity` are now monorepo-aware. Scan roots resolve in priority order:
+
+1. **`.devassets.yml` `roots:`** — explicit per-project override (hybrid model, Axis B groundwork)
+2. **Workspace manifest** — `pnpm-workspace.yaml`, `package.json` workspaces, Cargo `[workspace] members` (globs expanded)
+3. **Smart discovery** — sub-dirs that have both a manifest (package.json/Cargo.toml/…) AND an env file; skips `node_modules`, `archive`, `dist`, etc.
+
+- Asset locations are now scope-prefixed (`web/.env.local:8`), and missing-key detection runs per scope.
+- `readProjectEnvValue` reads token values transiently across all roots for `check`/`identity`.
+- Verified live on Party (root-registered, secrets in `web/`): resolved Vercel + Supabase identities,
+  surfaced an over-privileged Supabase PAT spanning 4 projects.
+- 7 new root-resolution tests; 85 total pass.
+
 ## 0.4.2 — 2026-06-08
 
 ### Improved — credential classification model (Axis A: sensitivity)

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { scanEnvKeys, scanDeclaredKeys, getEnvFiles } from '../utils/dotenv.js';
+import { resolveScanRoots } from './roots.js';
 import { PAYMENT_PLATFORM_KEY_PATTERNS } from '../utils/constants.js';
 import type { Asset, PaymentPlatformName } from '../types/index.js';
 
@@ -10,6 +11,7 @@ export interface ScanResult {
   assets: Omit<Asset, 'id'>[];
   detectedPlatforms: PaymentPlatformName[];
   envFilesFound: string[];
+  roots: string[];
   scannedAt: string;
 }
 
@@ -18,45 +20,56 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
     throw new Error(`Project path not found: ${projectPath}`);
   }
 
-  const envFiles = getEnvFiles(projectPath);
-  const keys = scanEnvKeys(projectPath);
-  const declared = scanDeclaredKeys(projectPath);
   const now = new Date().toISOString();
+  const roots = resolveScanRoots(projectPath);
+  const assets: Omit<Asset, 'id'>[] = [];
+  const envFilesFound: string[] = [];
+  const allNames: string[] = [];
 
-  const presentNames = new Set(keys.map(k => k.name));
+  for (const root of roots) {
+    const rootAbs = path.join(projectPath, root);
+    const prefix = root === '.' ? '' : `${root}/`;
 
-  const assets: Omit<Asset, 'id'>[] = keys.map(k => ({
-    projectId,
-    name: k.name,
-    location: `${k.file}:${k.line}`,
-    status: 'configured' as const,
-    environment: inferEnvironment(k.file),
-    lastSeen: now,
-  }));
+    const keys = scanEnvKeys(rootAbs);
+    const declared = scanDeclaredKeys(rootAbs);
+    const presentNames = new Set(keys.map(k => k.name));
+    allNames.push(...keys.map(k => k.name), ...declared.map(d => d.name));
+    envFilesFound.push(...getEnvFiles(rootAbs).map(f => `${prefix}${f}`));
 
-  // Keys declared in example files but absent from actual env → missing
-  const seenMissing = new Set<string>();
-  for (const d of declared) {
-    if (presentNames.has(d.name) || seenMissing.has(d.name)) continue;
-    seenMissing.add(d.name);
-    assets.push({
-      projectId,
-      name: d.name,
-      location: `${d.file}:${d.line}`,
-      status: 'missing',
-      environment: undefined,
-      lastSeen: now,
-    });
+    for (const k of keys) {
+      assets.push({
+        projectId,
+        name: k.name,
+        location: `${prefix}${k.file}:${k.line}`,
+        status: 'configured',
+        environment: inferEnvironment(k.file),
+        lastSeen: now,
+      });
+    }
+
+    // Keys declared in this root's example files but absent from this root's actual env → missing
+    const seenMissing = new Set<string>();
+    for (const d of declared) {
+      if (presentNames.has(d.name) || seenMissing.has(d.name)) continue;
+      seenMissing.add(d.name);
+      assets.push({
+        projectId,
+        name: d.name,
+        location: `${prefix}${d.file}:${d.line}`,
+        status: 'missing',
+        environment: undefined,
+        lastSeen: now,
+      });
+    }
   }
-
-  const detectedPlatforms = detectPaymentPlatforms([...presentNames, ...declared.map(d => d.name)]);
 
   return {
     projectId,
     projectPath,
     assets,
-    detectedPlatforms,
-    envFilesFound: envFiles,
+    detectedPlatforms: detectPaymentPlatforms(allNames),
+    envFilesFound,
+    roots,
     scannedAt: now,
   };
 }
