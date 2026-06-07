@@ -48,9 +48,24 @@ export interface CheckResult {
   suggestions: string[];
 }
 
+export interface CredentialIdentity {
+  keyName: string;
+  provider: string;
+  valid: boolean;
+  account?: string;
+  workspace?: string;
+  projects?: string[];
+  error?: string;
+  expectedAccount?: string;
+  expectedWorkspace?: string;
+  mismatch?: boolean;
+  checkedAt: string;
+}
+
 export interface ProjectDetail extends ProjectSummary {
   checkResult: CheckResult;
   platforms: PaymentPlatform[];
+  identities: CredentialIdentity[];
 }
 
 export interface AuditEntry {

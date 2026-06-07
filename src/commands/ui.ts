@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import open from 'open';
-import { listProjects, getProject, getAssets, getPaymentPlatforms, getAuditLogs } from '../db/queries.js';
+import { listProjects, getProject, getAssets, getPaymentPlatforms, getAuditLogs, getCredentialIdentities } from '../db/queries.js';
 import { validateAssets } from '../core/validator.js';
 import { logger } from '../utils/logger.js';
 import { DEFAULT_UI_PORT } from '../utils/constants.js';
@@ -46,7 +46,8 @@ export function uiCommand(options: UiOptions) {
       const assets = getAssets(req.params.id);
       const platforms = getPaymentPlatforms(req.params.id);
       const checkResult = validateAssets(assets, req.params.id);
-      res.json({ ...project, checkResult, platforms });
+      const identities = getCredentialIdentities(req.params.id);
+      res.json({ ...project, checkResult, platforms, identities });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

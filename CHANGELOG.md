@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 — 2026-06-08
+
+### Features — Credential Identity layer
+
+- **`devassets identity <project>`**: resolves which account / workspace / project each provider
+  token belongs to. Solves "wrong account / workspace mismatch / can't find it" across:
+  Vercel, Supabase, Neon, npm, Google Cloud (Paddle/Stripe via `check`).
+- **`--pin`**: lock the currently-resolved account/workspace as expected; future runs warn on drift (⚠ MISMATCH).
+- **Validity detection**: flags expired / revoked / wrong-scope tokens.
+- **`devassets_identity` MCP tool**: agents can resolve identities and detect mismatches.
+- **Dashboard**: per-project "Credential Identities" panel (cached, no live calls on page load).
+
+### Security
+
+- Token values are read **transiently** (`readEnvValue`) only to call a provider API, used in
+  memory, never persisted. New `credential_identities` table stores resolved metadata only — no tokens.
+- Offline resolution where possible: Supabase project ref parsed from `SUPABASE_URL`, GCloud
+  identity parsed from the service account JSON — no network, no token transmission.
+
 ## 0.3.0 — 2026-06-08
 
 ### Fixed (core behavior — found via dogfooding)

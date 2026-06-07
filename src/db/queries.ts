@@ -1,5 +1,5 @@
 import { getDb } from './index.js';
-import type { Project, Asset, PaymentPlatform, AuditLog } from '../types/index.js';
+import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity } from '../types/index.js';
 
 type Row = Record<string, unknown>;
 
@@ -129,4 +129,49 @@ export function getAuditLogs(projectId: string, sinceDays?: number): AuditLog[] 
 
 export function getCurrentUser(): string {
   return process.env.USER ?? process.env.USERNAME ?? 'owner';
+}
+
+export function getCredentialIdentities(projectId: string): ProviderIdentity[] {
+  const rows = getDb().prepare('SELECT * FROM credential_identities WHERE project_id=? ORDER BY key_name').all(projectId) as Row[];
+  return rows.map(r => ({
+    keyName: r['key_name'] as string,
+    provider: r['provider'] as string,
+    account: (r['account'] as string) ?? undefined,
+    workspace: (r['workspace'] as string) ?? undefined,
+    projects: r['projects'] ? JSON.parse(r['projects'] as string) : undefined,
+    valid: !!r['valid'],
+    error: (r['error'] as string) ?? undefined,
+    expectedAccount: (r['expected_account'] as string) ?? undefined,
+    expectedWorkspace: (r['expected_workspace'] as string) ?? undefined,
+    mismatch: computeMismatch(r['account'] as string, r['workspace'] as string, r['expected_account'] as string, r['expected_workspace'] as string),
+    checkedAt: r['checked_at'] as string,
+  }));
+}
+
+function computeMismatch(account?: string, workspace?: string, expAccount?: string, expWorkspace?: string): boolean {
+  if (expAccount && account && expAccount !== account) return true;
+  if (expWorkspace && workspace && expWorkspace !== workspace) return true;
+  return false;
+}
+
+export function upsertCredentialIdentity(projectId: string, id: ProviderIdentity) {
+  const db = getDb();
+  const projects = id.projects ? JSON.stringify(id.projects) : null;
+  const existing = db.prepare('SELECT expected_account, expected_workspace FROM credential_identities WHERE project_id=? AND key_name=?').get(projectId, id.keyName) as Row | undefined;
+  if (existing) {
+    db.prepare('UPDATE credential_identities SET provider=?, account=?, workspace=?, projects=?, valid=?, error=?, checked_at=? WHERE project_id=? AND key_name=?')
+      .run(id.provider, id.account ?? null, id.workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt, projectId, id.keyName);
+  } else {
+    db.prepare('INSERT INTO credential_identities (project_id, key_name, provider, account, workspace, projects, valid, error, checked_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(projectId, id.keyName, id.provider, id.account ?? null, id.workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt);
+  }
+}
+
+// Pin the currently-resolved account/workspace as the expected baseline; future drift will warn.
+export function pinCredentialIdentity(projectId: string, keyName: string) {
+  const db = getDb();
+  const r = db.prepare('SELECT account, workspace FROM credential_identities WHERE project_id=? AND key_name=?').get(projectId, keyName) as Row | undefined;
+  if (!r) return;
+  db.prepare('UPDATE credential_identities SET expected_account=?, expected_workspace=? WHERE project_id=? AND key_name=?')
+    .run((r['account'] as string | null) ?? null, (r['workspace'] as string | null) ?? null, projectId, keyName);
 }

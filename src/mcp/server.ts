@@ -12,7 +12,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.3.0',
+    version: '0.4.0',
   });
 
   server.tool(
@@ -215,6 +215,22 @@ export async function startMcpServer() {
       }
       upsertProject({ id, name, path: resolvedPath, type });
       return { content: [{ type: 'text', text: JSON.stringify({ registered: true, id, name, path: resolvedPath, type, next: `devassets_scan with project=${id}` }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_identity',
+    'Resolve which account/workspace/project each provider token in a project belongs to (Vercel, Supabase, Neon, npm, Google Cloud). Detects wrong-account / workspace-mismatch issues. Token values are read transiently and never stored.',
+    {
+      project: z.string().describe('Project ID'),
+    },
+    async ({ project: projectId }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      const { resolveProjectIdentities } = await import('../core/identity.js');
+      const identities = await resolveProjectIdentities(project);
+      addAuditLog({ projectId, action: 'identity', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { resolved: identities.length, via: 'mcp' }, result: 'success' });
+      return { content: [{ type: 'text', text: JSON.stringify(identities, null, 2) }] };
     }
   );
 

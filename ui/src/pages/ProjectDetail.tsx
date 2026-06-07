@@ -69,6 +69,39 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {project.identities && project.identities.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-gray-400 mb-2">Credential Identities</h2>
+          <div className="space-y-2">
+            {project.identities.map(id => (
+              <div
+                key={id.keyName}
+                className={`bg-gray-900 border rounded p-3 ${id.mismatch ? 'border-red-700' : id.valid ? 'border-gray-800' : 'border-orange-800'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-white">{id.keyName}</span>
+                  <span className="text-xs text-gray-500">{id.provider}</span>
+                </div>
+                {id.valid ? (
+                  <div className="mt-1 text-xs text-gray-400 space-y-0.5">
+                    {id.account && <div>account: <span className="text-gray-300">{id.account}</span></div>}
+                    {id.workspace && <div>workspace: <span className="text-gray-300">{id.workspace}</span></div>}
+                    {id.projects && id.projects.length > 0 && <div>projects: <span className="text-gray-300">{id.projects.join(', ')}</span></div>}
+                    {id.mismatch && (
+                      <div className="text-red-400 mt-1">
+                        ⚠ MISMATCH — expected account={id.expectedAccount ?? '—'} workspace={id.expectedWorkspace ?? '—'}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-orange-400">{id.error ?? 'invalid'}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-gray-400">Assets</h2>

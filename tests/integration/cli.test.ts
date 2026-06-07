@@ -25,7 +25,7 @@ const PROJECT_PATH = path.join(TMP, 'myproject');
 
 beforeAll(() => {
   fs.mkdirSync(PROJECT_PATH, { recursive: true });
-  fs.writeFileSync(path.join(PROJECT_PATH, '.env'), 'DATABASE_URL=postgres://localhost\nSECRET_KEY=abc\nAPP_NAME=test\n');
+  fs.writeFileSync(path.join(PROJECT_PATH, '.env'), 'DATABASE_URL=postgres://localhost\nSECRET_KEY=abc\nAPP_NAME=test\nNEXT_PUBLIC_SUPABASE_URL=https://testref01.supabase.co\n');
   fs.writeFileSync(path.join(PROJECT_PATH, '.env.production'), 'PADDLE_API_KEY=pdl_live_xyz\nPADDLE_WEBHOOK_SECRET=whsec_abc\n');
 });
 
@@ -199,6 +199,27 @@ describe('CLI: doctor', () => {
     expect(report).toHaveProperty('deadPaths');
     expect(Array.isArray(report.deadPaths)).toBe(true);
     expect(report).toHaveProperty('summary');
+  });
+});
+
+describe('CLI: identity', () => {
+  it('resolves Supabase project ref from URL (offline)', () => {
+    const { stdout, status } = cli('identity myproject --json');
+    expect(status).toBe(0);
+    const ids = JSON.parse(stdout);
+    const sb = ids.find((i: { keyName: string }) => i.keyName === 'NEXT_PUBLIC_SUPABASE_URL');
+    expect(sb).toBeDefined();
+    expect(sb.valid).toBe(true);
+    expect(sb.workspace).toBe('testref01');
+  });
+
+  it('--pin sets expected and subsequent run reports no mismatch', () => {
+    cli('identity myproject --pin --json');
+    const { stdout } = cli('identity myproject --json');
+    const ids = JSON.parse(stdout);
+    const sb = ids.find((i: { keyName: string }) => i.keyName === 'NEXT_PUBLIC_SUPABASE_URL');
+    expect(sb.expectedWorkspace).toBe('testref01');
+    expect(sb.mismatch).toBe(false);
   });
 });
 

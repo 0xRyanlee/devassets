@@ -11,13 +11,14 @@ import { uiCommand } from './commands/ui.js';
 import { serveCommand } from './commands/serve.js';
 import { doctorCommand } from './commands/doctor.js';
 import { installSkillsCommand } from './commands/install-skills.js';
+import { identityCommand } from './commands/identity.js';
 
 const program = new Command();
 
 program
   .name('devassets')
   .description('Developer asset management for independent developers')
-  .version('0.3.0');
+  .version('0.4.0');
 
 program
   .command('init')
@@ -97,6 +98,13 @@ program
   .option('--json', 'Output JSON')
   .option('--fix', 'Re-scan all projects to refresh stale asset records')
   .action(doctorCommand);
+
+program
+  .command('identity <project>')
+  .description('Resolve which account/workspace each provider token belongs to (Vercel, Supabase, Neon, npm, GCloud)')
+  .option('--json', 'Output JSON')
+  .option('--pin', 'Pin the resolved account/workspace as expected; future drift will warn')
+  .action(identityCommand);
 
 program
   .command('install-skills')

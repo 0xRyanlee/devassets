@@ -55,8 +55,25 @@ function runMigrations(db: DatabaseSync) {
       result TEXT NOT NULL DEFAULT 'success'
     );
 
+    CREATE TABLE IF NOT EXISTS credential_identities (
+      project_id TEXT NOT NULL,
+      key_name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      account TEXT,
+      workspace TEXT,
+      projects TEXT,
+      valid INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      expected_account TEXT,
+      expected_workspace TEXT,
+      checked_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, key_name),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_project ON audit_logs(project_id);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_cred_identities_project ON credential_identities(project_id);
   `);
 }
