@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ENV_FILE_PATTERNS } from './constants.js';
+import { ENV_FILE_PATTERNS, EXAMPLE_FILE_PATTERNS } from './constants.js';
 
 export interface EnvKey {
   name: string;
@@ -8,11 +8,11 @@ export interface EnvKey {
   line: number;
 }
 
-export function scanEnvKeys(projectPath: string): EnvKey[] {
+function scanKeys(projectPath: string, patterns: string[]): EnvKey[] {
   const keys: EnvKey[] = [];
-
   const resolvedRoot = path.resolve(projectPath);
-  for (const pattern of ENV_FILE_PATTERNS) {
+
+  for (const pattern of patterns) {
     const filePath = path.join(projectPath, pattern);
     const resolvedFile = path.resolve(filePath);
     if (!resolvedFile.startsWith(resolvedRoot + path.sep) && resolvedFile !== resolvedRoot) {
@@ -22,23 +22,24 @@ export function scanEnvKeys(projectPath: string): EnvKey[] {
     if (!fs.existsSync(filePath)) continue;
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
-
-    lines.forEach((line, idx) => {
+    content.split('\n').forEach((line, idx) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('#') || !trimmed) return;
       const match = trimmed.match(/^([A-Z_][A-Z0-9_]*)=/);
-      if (match) {
-        keys.push({
-          name: match[1],
-          file: pattern,
-          line: idx + 1,
-        });
-      }
+      if (match) keys.push({ name: match[1], file: pattern, line: idx + 1 });
     });
   }
 
   return keys;
+}
+
+export function scanEnvKeys(projectPath: string): EnvKey[] {
+  return scanKeys(projectPath, ENV_FILE_PATTERNS);
+}
+
+// Keys declared in .env.example / .env.sample / .env.template — the "required" set
+export function scanDeclaredKeys(projectPath: string): EnvKey[] {
+  return scanKeys(projectPath, EXAMPLE_FILE_PATTERNS);
 }
 
 export function getEnvFiles(projectPath: string): string[] {

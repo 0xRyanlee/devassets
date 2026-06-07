@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { scanEnvKeys, getEnvFiles } from '../utils/dotenv.js';
+import { scanEnvKeys, scanDeclaredKeys, getEnvFiles } from '../utils/dotenv.js';
 import { PAYMENT_PLATFORM_KEY_PATTERNS } from '../utils/constants.js';
 import type { Asset, PaymentPlatformName } from '../types/index.js';
 
@@ -20,7 +20,10 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
 
   const envFiles = getEnvFiles(projectPath);
   const keys = scanEnvKeys(projectPath);
+  const declared = scanDeclaredKeys(projectPath);
   const now = new Date().toISOString();
+
+  const presentNames = new Set(keys.map(k => k.name));
 
   const assets: Omit<Asset, 'id'>[] = keys.map(k => ({
     projectId,
@@ -31,7 +34,22 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
     lastSeen: now,
   }));
 
-  const detectedPlatforms = detectPaymentPlatforms(keys.map(k => k.name));
+  // Keys declared in example files but absent from actual env → missing
+  const seenMissing = new Set<string>();
+  for (const d of declared) {
+    if (presentNames.has(d.name) || seenMissing.has(d.name)) continue;
+    seenMissing.add(d.name);
+    assets.push({
+      projectId,
+      name: d.name,
+      location: `${d.file}:${d.line}`,
+      status: 'missing',
+      environment: undefined,
+      lastSeen: now,
+    });
+  }
+
+  const detectedPlatforms = detectPaymentPlatforms([...presentNames, ...declared.map(d => d.name)]);
 
   return {
     projectId,

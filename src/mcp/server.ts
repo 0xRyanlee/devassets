@@ -12,7 +12,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.2.0',
+    version: '0.3.0',
   });
 
   server.tool(

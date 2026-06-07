@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 — 2026-06-08
+
+### Fixed (core behavior — found via dogfooding)
+
+- **Missing-key detection now works.** `.env.example` / `.env.sample` / `.env.template` are
+  treated as the *declaration of required keys*, not as a config source. Keys declared there
+  but absent from the actual `.env*` files are flagged as missing. Previously example files
+  were scanned as real sources, so every declared key counted as "configured" and projects
+  with unset required keys falsely reported healthy.
+- **Two-tier missing severity**: secret-like keys (KEY/SECRET/TOKEN/PASSWORD/DSN/CREDENTIAL/
+  API_KEY/…) missing → high (critical in production); non-sensitive config (APP_NAME, timeouts,
+  feature flags) missing → low, does not break health status. Avoids false alarms on optional config.
+
+### Notes
+
+- This changes scan results: projects with `.env.example` files declaring unset keys will now
+  surface real risks. Run `devassets doctor --fix` to re-scan after upgrading.
+
 ## 0.2.0 — 2026-06-08
 
 ### Features

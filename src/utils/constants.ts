@@ -13,8 +13,21 @@ export const ENV_FILE_PATTERNS = [
   '.env.staging',
   '.env.production',
   '.env.test',
-  '.env.example',
 ];
+
+// Declaration files: list required keys, not actual values. Used to detect missing keys.
+export const EXAMPLE_FILE_PATTERNS = [
+  '.env.example',
+  '.env.sample',
+  '.env.template',
+];
+
+// Keys whose absence is a real risk (secrets), vs non-sensitive config that can have code defaults
+export const SENSITIVE_KEY_PATTERN = /(SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|API_?KEY|ACCESS_?KEY|_TOKEN$|TOKEN_KEY|_KEY$|_DSN$|^DSN$)/i;
+
+export function isSensitiveKey(name: string): boolean {
+  return SENSITIVE_KEY_PATTERN.test(name);
+}
 
 export const PAYMENT_PLATFORM_KEY_PATTERNS: Record<string, RegExp[]> = {
   paddle: [/^PADDLE_/i],

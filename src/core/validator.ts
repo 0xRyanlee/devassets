@@ -1,5 +1,5 @@
 import type { Asset, RiskItem, RiskLevel, CheckResult, PaymentStatus } from '../types/index.js';
-import { API_KEY_ROTATION_THRESHOLD_DAYS, API_KEY_WARNING_THRESHOLD_DAYS } from '../utils/constants.js';
+import { API_KEY_ROTATION_THRESHOLD_DAYS, API_KEY_WARNING_THRESHOLD_DAYS, isSensitiveKey } from '../utils/constants.js';
 
 export function validateAssets(assets: Asset[], projectId: string, environment?: string): CheckResult {
   const now = new Date().toISOString();
@@ -13,11 +13,15 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
 
   for (const asset of missing) {
     const isProd = environment === 'production' || asset.environment === 'production';
+    const sensitive = isSensitiveKey(asset.name);
+    const level: RiskLevel = sensitive ? (isProd ? 'critical' : 'high') : 'low';
     risks.push({
-      level: isProd ? 'critical' : 'high',
+      level,
       asset: asset.name,
-      message: `${asset.name} is missing${environment ? ` in ${environment}` : ''}`,
-      suggestion: `Add ${asset.name} to ${asset.location.split(':')[0]}`,
+      message: sensitive
+        ? `${asset.name} is missing${environment ? ` in ${environment}` : ''}`
+        : `${asset.name} declared in example but not set (optional config)`,
+      suggestion: `Add ${asset.name} to ${asset.location.split(':')[0].replace(/\.example|\.sample|\.template/, '')}`,
     });
   }
 
@@ -53,7 +57,7 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
         name: a.name,
         status: a.status,
         location: a.location,
-        risk: getRiskForStatus(a.status, environment),
+        risk: getRiskForStatus(a.status, environment, a.name),
       })),
       paymentPlatforms: [],
     },
@@ -62,8 +66,11 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
   };
 }
 
-function getRiskForStatus(status: string, environment?: string): RiskLevel | undefined {
-  if (status === 'missing') return environment === 'production' ? 'critical' : 'high';
+function getRiskForStatus(status: string, environment?: string, name?: string): RiskLevel | undefined {
+  if (status === 'missing') {
+    if (name && !isSensitiveKey(name)) return 'low';
+    return environment === 'production' ? 'critical' : 'high';
+  }
   if (status === 'error') return 'high';
   if (status === 'warning') return 'medium';
   return undefined;
