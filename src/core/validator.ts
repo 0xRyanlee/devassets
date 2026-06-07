@@ -1,5 +1,5 @@
 import type { Asset, RiskItem, RiskLevel, CheckResult, PaymentStatus } from '../types/index.js';
-import { API_KEY_ROTATION_THRESHOLD_DAYS, API_KEY_WARNING_THRESHOLD_DAYS, isSensitiveKey } from '../utils/constants.js';
+import { API_KEY_ROTATION_THRESHOLD_DAYS, API_KEY_WARNING_THRESHOLD_DAYS, classifyKey } from '../utils/constants.js';
 
 export function validateAssets(assets: Asset[], projectId: string, environment?: string): CheckResult {
   const now = new Date().toISOString();
@@ -13,14 +13,18 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
 
   for (const asset of missing) {
     const isProd = environment === 'production' || asset.environment === 'production';
-    const sensitive = isSensitiveKey(asset.name);
-    const level: RiskLevel = sensitive ? (isProd ? 'critical' : 'high') : 'low';
+    const sensitivity = classifyKey(asset.name);
+    const level: RiskLevel = sensitivity === 'secret' ? (isProd ? 'critical' : 'high') : 'low';
+    const kindLabel =
+      sensitivity === 'public' ? 'public config' :
+      sensitivity === 'identifier' ? 'identifier' :
+      sensitivity === 'config' ? 'optional config' : 'secret';
     risks.push({
       level,
       asset: asset.name,
-      message: sensitive
+      message: sensitivity === 'secret'
         ? `${asset.name} is missing${environment ? ` in ${environment}` : ''}`
-        : `${asset.name} declared in example but not set (optional config)`,
+        : `${asset.name} declared in example but not set (${kindLabel})`,
       suggestion: `Add ${asset.name} to ${asset.location.split(':')[0].replace(/\.example|\.sample|\.template/, '')}`,
     });
   }
@@ -68,7 +72,7 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
 
 function getRiskForStatus(status: string, environment?: string, name?: string): RiskLevel | undefined {
   if (status === 'missing') {
-    if (name && !isSensitiveKey(name)) return 'low';
+    if (name && classifyKey(name) !== 'secret') return 'low';
     return environment === 'production' ? 'critical' : 'high';
   }
   if (status === 'error') return 'high';

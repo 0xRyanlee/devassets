@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 — 2026-06-08
+
+### Improved — credential classification model (Axis A: sensitivity)
+
+Replaces the binary sensitive/not heuristic with a 4-way classifier (`classifyKey`),
+grounded in the project-forms research. Fixes real misclassifications:
+
+- `NEXT_PUBLIC_` / `PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` prefix ⇒ **public** (overrides all) —
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_VAPID_KEY` no longer falsely flagged as secrets.
+- `*_CLIENT_ID`, `*_PRICE_ID`, `*_PRODUCT_ID`, `*_TEAM_ID`, `*_LIFF_ID` ⇒ **identifier** (not secret).
+- `DATABASE_URL` / `DIRECT_URL` / `*_DSN` / `CONNECTION_STRING` ⇒ **secret** (embedded password).
+- Missing-key severity: only `secret` drives high/critical; public/identifier/config stay low.
+
+Risk messages now name the category (public config / identifier / optional config / secret).
+6 new classifier tests; 78 total pass.
+
 ## 0.4.1 — 2026-06-08
 
 ### Fixed (found via cross-project dogfooding on mindset)

@@ -1,6 +1,6 @@
 {
   "name": "@hyphen-network/devassets",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Developer asset management system for independent developers",
   "type": "module",
   "bin": {

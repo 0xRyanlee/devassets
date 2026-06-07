@@ -22,11 +22,28 @@ export const EXAMPLE_FILE_PATTERNS = [
   '.env.template',
 ];
 
-// Keys whose absence is a real risk (secrets), vs non-sensitive config that can have code defaults
-export const SENSITIVE_KEY_PATTERN = /(SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|API_?KEY|ACCESS_?KEY|_TOKEN$|TOKEN_KEY|_KEY$|_DSN$|^DSN$)/i;
+export type KeySensitivity = 'public' | 'secret' | 'identifier' | 'config';
+
+// Prefixes that frameworks expose to the client bundle — public by design, never a secret
+const PUBLIC_PREFIX = /^(NEXT_PUBLIC_|PUBLIC_|VITE_|EXPO_PUBLIC_|REACT_APP_|GATSBY_)/i;
+// Connection strings carry an embedded password even though the name says neither KEY nor SECRET
+const EMBEDDED_SECRET = /(DATABASE_URL|DIRECT_URL|_DSN$|^DSN$|CONNECTION_STRING)/i;
+// Real server-side secrets
+const SECRET = /(SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE_KEY|SERVICE_ROLE|ACCESS_TOKEN|API_?KEY|_TOKEN$|TOKEN_KEY|_KEY$)/i;
+// Non-sensitive identifiers / references
+const IDENTIFIER = /(_CLIENT_ID$|_PRICE_ID$|_PRODUCT_ID$|_SELLER_ID$|_TEAM_ID$|_LIFF_ID$|_PROJECT_ID$|_APP_ID$|_ACCOUNT_ID$|_ID$)/i;
+
+// Classify a credential key NAME by sensitivity. Order is significant: public prefix wins over all.
+export function classifyKey(name: string): KeySensitivity {
+  if (PUBLIC_PREFIX.test(name)) return 'public';
+  if (EMBEDDED_SECRET.test(name)) return 'secret';
+  if (SECRET.test(name)) return 'secret';
+  if (IDENTIFIER.test(name)) return 'identifier';
+  return 'config';
+}
 
 export function isSensitiveKey(name: string): boolean {
-  return SENSITIVE_KEY_PATTERN.test(name);
+  return classifyKey(name) === 'secret';
 }
 
 export const PAYMENT_PLATFORM_KEY_PATTERNS: Record<string, RegExp[]> = {
