@@ -11,8 +11,10 @@ export interface EnvKey {
 export function scanEnvKeys(projectPath: string): EnvKey[] {
   const keys: EnvKey[] = [];
 
+  const resolvedRoot = path.resolve(projectPath);
   for (const pattern of ENV_FILE_PATTERNS) {
     const filePath = path.join(projectPath, pattern);
+    if (!path.resolve(filePath).startsWith(resolvedRoot + path.sep) && path.resolve(filePath) !== resolvedRoot) continue;
     if (!fs.existsSync(filePath)) continue;
 
     const content = fs.readFileSync(filePath, 'utf-8');

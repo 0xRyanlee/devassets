@@ -53,7 +53,8 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
       signature: { algorithm: 'hmac-sha256', value: signature, timestamp },
     });
   } else {
-    finalContent = baseContent;
+    // checklist and reference-only formats append signature as a comment so receivers can verify
+    finalContent = baseContent + `\n<!-- devassets-signature: ${signature} ts: ${timestamp} -->`;
   }
 
   const autoDecision = assessEncryptionNeed(checkResult, options);
@@ -66,9 +67,13 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
 
   let outputPath: string | undefined;
   if (options.outputPath) {
-    fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
-    fs.writeFileSync(options.outputPath, finalContent, 'utf-8');
-    outputPath = options.outputPath;
+    const resolvedOutput = path.resolve(options.outputPath);
+    const allowedRoots = [process.cwd(), process.env.HOME ?? '/tmp'];
+    const allowed = allowedRoots.some(r => resolvedOutput.startsWith(path.resolve(r)));
+    if (!allowed) throw new Error(`Output path not allowed: ${options.outputPath}`);
+    fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+    fs.writeFileSync(resolvedOutput, finalContent, 'utf-8');
+    outputPath = resolvedOutput;
   }
 
   return { content: finalContent, format: options.format, signature, timestamp, encrypted, outputPath, autoDecision };

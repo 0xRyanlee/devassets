@@ -1,6 +1,7 @@
 import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
+import { checkStripeStatus } from '../integrations/stripe.js';
 import { formatCheckHuman, formatCheckJson } from '../core/formatter.js';
 import { logger } from '../utils/logger.js';
 import type { PaymentStatus } from '../types/index.js';
@@ -28,9 +29,9 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     const paymentStatuses: PaymentStatus[] = [];
     for (const platform of platforms) {
       if (platform.name === 'paddle') {
-        const paddleApiKey = process.env.PADDLE_API_KEY;
-        const status = await checkPaddleStatus(projectId, paddleApiKey);
-        paymentStatuses.push(status);
+        paymentStatuses.push(await checkPaddleStatus(projectId, process.env.PADDLE_API_KEY));
+      } else if (platform.name === 'stripe') {
+        paymentStatuses.push(await checkStripeStatus(projectId, process.env.STRIPE_SECRET_KEY));
       }
     }
 

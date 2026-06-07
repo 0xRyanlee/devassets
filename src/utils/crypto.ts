@@ -69,7 +69,8 @@ export function decryptAES(encrypted: string, password: string): string {
 }
 
 export function hashValue(value: string): string {
-  return createHmac('sha256', 'devassets-hash-salt')
+  const key = getSignatureKey();
+  return createHmac('sha256', key)
     .update(value)
     .digest('hex')
     .slice(0, 16);

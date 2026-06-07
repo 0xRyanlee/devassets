@@ -9,6 +9,7 @@ import { rotateCommand } from './commands/rotate.js';
 import { auditCommand } from './commands/audit.js';
 import { uiCommand } from './commands/ui.js';
 import { serveCommand } from './commands/serve.js';
+import { doctorCommand } from './commands/doctor.js';
 
 const program = new Command();
 
@@ -88,5 +89,11 @@ program
   .command('serve')
   .description('Start DevAssets as an MCP server (stdio)')
   .action(serveCommand);
+
+program
+  .command('doctor')
+  .description('Global health report across all registered projects')
+  .option('--json', 'Output JSON')
+  .action(doctorCommand);
 
 export { program };

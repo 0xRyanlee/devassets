@@ -168,6 +168,31 @@ describe('CLI: verify', () => {
   });
 });
 
+describe('CLI: doctor', () => {
+  it('prints health report in human format', () => {
+    const { stdout, status } = cli('doctor');
+    expect(status).toBe(0);
+    expect(stdout).toContain('DevAssets');
+  });
+
+  it('outputs valid JSON with --json flag', () => {
+    const { stdout, status } = cli('doctor --json');
+    expect(status).toBe(0);
+    const report = JSON.parse(stdout);
+    expect(report).toHaveProperty('summary');
+    expect(report).toHaveProperty('projects');
+    expect(report).toHaveProperty('topRisks');
+    expect(report).toHaveProperty('recentActivity');
+  });
+
+  it('summary counts are consistent', () => {
+    const { stdout } = cli('doctor --json');
+    const report = JSON.parse(stdout);
+    const { healthy, warning, critical, total } = report.summary;
+    expect(healthy + warning + critical).toBe(total);
+  });
+});
+
 describe('CLI: error handling', () => {
   it('exits 1 for unknown project', () => {
     const { status } = cli('scan nonexistent');

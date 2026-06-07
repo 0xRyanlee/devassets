@@ -6,6 +6,8 @@ import { scanProject } from '../core/scanner.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { exportManifest, generateOutputPath } from '../core/exporter.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
+import { checkStripeStatus } from '../integrations/stripe.js';
+import { buildDoctorReport } from '../commands/doctor.js';
 
 export async function startMcpServer() {
   const server = new McpServer({
@@ -47,6 +49,8 @@ export async function startMcpServer() {
       for (const p of platforms) {
         if (p.name === 'paddle') {
           paymentStatuses.push(await checkPaddleStatus(projectId, process.env.PADDLE_API_KEY));
+        } else if (p.name === 'stripe') {
+          paymentStatuses.push(await checkStripeStatus(projectId, process.env.STRIPE_SECRET_KEY));
         }
       }
       if (paymentStatuses.length > 0) result = mergePaymentRisks(result, paymentStatuses);
@@ -188,6 +192,32 @@ export async function startMcpServer() {
     async ({ id, name, path: projectPath, type = 'other' }) => {
       upsertProject({ id, name, path: projectPath, type });
       return { content: [{ type: 'text', text: JSON.stringify({ registered: true, id, name, path: projectPath, type, next: `devassets_scan with project=${id}` }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_doctor',
+    'Global health report across all registered projects',
+    {
+      json: z.boolean().optional().describe('Return raw JSON report instead of summary'),
+    },
+    async ({ json: asJson }) => {
+      const projects = listProjects();
+      if (projects.length === 0) {
+        return { content: [{ type: 'text', text: JSON.stringify({ message: 'No projects registered.' }) }] };
+      }
+      const report = buildDoctorReport(projects);
+      if (asJson) {
+        return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
+      }
+      const summary = {
+        generatedAt: report.generatedAt,
+        summary: report.summary,
+        topRisks: report.topRisks.slice(0, 5),
+        recentActivity: report.recentActivity.slice(0, 5),
+        projects: report.projects.map(p => ({ id: p.id, name: p.name, status: p.status, riskCount: p.riskCount })),
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
     }
   );
 

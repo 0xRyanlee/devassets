@@ -1,4 +1,4 @@
-import type { PaymentStatus, WebhookStatus } from '../types/index.js';
+import type { PaymentStatus, WebhookStatus, RiskItem } from '../types/index.js';
 
 interface PaddleWebhook {
   url: string;
@@ -47,7 +47,7 @@ export async function checkPaddleStatus(projectId: string, apiKey?: string): Pro
 
     return {
       platform: 'paddle',
-      status: risks.some(r => r.level === 'high') ? 'warning' : 'healthy',
+      status: risks.some(r => r.level === 'critical') ? 'critical' : risks.some(r => r.level === 'high') ? 'warning' : 'healthy',
       webhook: webhookStatus,
       risks,
     };
@@ -77,8 +77,8 @@ function buildWebhookStatus(webhook?: PaddleWebhook): WebhookStatus {
   };
 }
 
-function assessPaddleRisks(webhook: WebhookStatus) {
-  const risks = [];
+function assessPaddleRisks(webhook: WebhookStatus): RiskItem[] {
+  const risks: RiskItem[] = [];
 
   if (!webhook.registered) {
     risks.push({
