@@ -94,7 +94,15 @@ export function upsertPaymentPlatform(platform: Omit<PaymentPlatform, 'id'>) {
 
 export function addAuditLog(log: Omit<AuditLog, 'id'>) {
   const db = getDb();
-  const details = log.details ? JSON.stringify(log.details) : null;
+  let details: string | null = null;
+  if (log.details) {
+    try {
+      const raw = JSON.stringify(log.details);
+      details = raw.length > 4096 ? raw.slice(0, 4096) : raw;
+    } catch {
+      details = '{"error":"details_not_serializable"}';
+    }
+  }
   db.prepare('INSERT INTO audit_logs (project_id, action, user, timestamp, details, result) VALUES (?,?,?,?,?,?)')
     .run(log.projectId, log.action, log.user, log.timestamp, details, log.result);
 }

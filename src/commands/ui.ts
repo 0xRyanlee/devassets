@@ -19,7 +19,7 @@ export function uiCommand(options: UiOptions) {
   const port = parseInt(options.port ?? String(DEFAULT_UI_PORT));
   const app = express();
 
-  app.use(cors());
+  app.use(cors({ origin: `http://localhost:${port}` }));
   app.use(express.json());
 
   const uiDist = path.join(__dirname, '../../ui/dist');
@@ -86,7 +86,7 @@ export function uiCommand(options: UiOptions) {
     res.sendFile(path.join(uiDist, 'index.html'));
   });
 
-  app.listen(port, () => {
+  app.listen(port, '127.0.0.1', () => {
     const url = `http://localhost:${port}`;
     logger.success(`DevAssets Dashboard running at ${url}`);
     if (!options.noOpen) open(url);

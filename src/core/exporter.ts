@@ -68,9 +68,6 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
   let outputPath: string | undefined;
   if (options.outputPath) {
     const resolvedOutput = path.resolve(options.outputPath);
-    const allowedRoots = [process.cwd(), process.env.HOME ?? '/tmp'];
-    const allowed = allowedRoots.some(r => resolvedOutput.startsWith(path.resolve(r)));
-    if (!allowed) throw new Error(`Output path not allowed: ${options.outputPath}`);
     fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
     fs.writeFileSync(resolvedOutput, finalContent, 'utf-8');
     outputPath = resolvedOutput;

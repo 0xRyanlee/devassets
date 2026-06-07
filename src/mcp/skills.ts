@@ -6,8 +6,10 @@ const SKILLS_DIR = path.resolve(fileURLToPath(import.meta.url), '../../../skills
 
 export function readSkillContent(name: string): string {
   const skillPath = path.join(SKILLS_DIR, `${name}.md`);
-  if (!fs.existsSync(skillPath)) return `Skill "${name}" not found at ${skillPath}`;
-  return fs.readFileSync(skillPath, 'utf-8');
+  const resolved = path.resolve(skillPath);
+  if (!resolved.startsWith(SKILLS_DIR + path.sep)) throw new Error(`Invalid skill name: ${name}`);
+  if (!fs.existsSync(resolved)) return `Skill "${name}" not found`;
+  return fs.readFileSync(resolved, 'utf-8');
 }
 
 export function listSkills(): string[] {

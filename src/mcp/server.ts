@@ -98,6 +98,15 @@ export async function startMcpServer() {
       const project = getProject(projectId);
       if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
 
+      if (output_path) {
+        const { resolve: resolvePath, sep } = await import('path');
+        const resolved = resolvePath(output_path);
+        const cwd = resolvePath(process.cwd());
+        if (!resolved.startsWith(cwd + sep) && resolved !== cwd) {
+          return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path must be within current working directory` }) }] };
+        }
+      }
+
       const assets = getAssets(projectId, environment);
       const checkResult = validateAssets(assets, projectId, environment);
       const outputPath = output_path ?? generateOutputPath(projectId, environment, format);
@@ -108,7 +117,8 @@ export async function startMcpServer() {
 
       addAuditLog({ projectId, action: 'export', user: getCurrentUser(), timestamp: result.timestamp, details: { environment, format, encrypted: result.encrypted, via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ signature: result.signature, timestamp: result.timestamp, encrypted: result.encrypted, outputPath: result.outputPath, autoDecision: result.autoDecision, preview: result.content.slice(0, 500) }) }] };
+      // preview omitted: plaintext manifest content must not be returned in MCP response unencrypted
+      return { content: [{ type: 'text', text: JSON.stringify({ signature: result.signature, timestamp: result.timestamp, encrypted: result.encrypted, outputPath: result.outputPath, autoDecision: result.autoDecision }) }] };
     }
   );
 
@@ -155,7 +165,7 @@ export async function startMcpServer() {
     'Record intent to rotate an API key and get rotation instructions',
     {
       project: z.string().describe('Project ID'),
-      key_name: z.string().describe('Key name to rotate (e.g. PADDLE_API_KEY)'),
+      key_name: z.string().max(256).regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name to rotate (e.g. PADDLE_API_KEY)'),
     },
     async ({ project: projectId, key_name }) => {
       const project = getProject(projectId);
@@ -190,8 +200,21 @@ export async function startMcpServer() {
       type: z.enum(['saas', 'mobile', 'desktop', 'library', 'other']).optional().describe('Project type'),
     },
     async ({ id, name, path: projectPath, type = 'other' }) => {
-      upsertProject({ id, name, path: projectPath, type });
-      return { content: [{ type: 'text', text: JSON.stringify({ registered: true, id, name, path: projectPath, type, next: `devassets_scan with project=${id}` }) }] };
+      const { statSync } = await import('fs');
+      const resolvedPath = (await import('path')).resolve(projectPath);
+      try {
+        const stat = statSync(resolvedPath);
+        if (!stat.isDirectory()) throw new Error('Not a directory');
+      } catch {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: `Path does not exist or is not a directory: ${projectPath}` }) }] };
+      }
+      const sensitiveRoots = ['/.ssh', '/.gnupg', '/.aws', '/.config/gcloud'];
+      const isSensitive = sensitiveRoots.some(s => resolvedPath.includes(s));
+      if (isSensitive) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: `Registering sensitive system paths is not allowed: ${projectPath}` }) }] };
+      }
+      upsertProject({ id, name, path: resolvedPath, type });
+      return { content: [{ type: 'text', text: JSON.stringify({ registered: true, id, name, path: resolvedPath, type, next: `devassets_scan with project=${id}` }) }] };
     }
   );
 
@@ -277,6 +300,10 @@ export async function startMcpServer() {
 }
 
 function generateCiSnippet(projectId: string, branch: string, environment: string) {
+  const safe = /^[a-zA-Z0-9_.-]+$/;
+  if (!safe.test(projectId) || !safe.test(branch) || !safe.test(environment)) {
+    throw new Error('projectId, branch, and environment must contain only alphanumeric characters, hyphens, underscores, and dots');
+  }
   const reusable = `name: DevAssets Check
 on:
   push:

@@ -14,7 +14,11 @@ export function scanEnvKeys(projectPath: string): EnvKey[] {
   const resolvedRoot = path.resolve(projectPath);
   for (const pattern of ENV_FILE_PATTERNS) {
     const filePath = path.join(projectPath, pattern);
-    if (!path.resolve(filePath).startsWith(resolvedRoot + path.sep) && path.resolve(filePath) !== resolvedRoot) continue;
+    const resolvedFile = path.resolve(filePath);
+    if (!resolvedFile.startsWith(resolvedRoot + path.sep) && resolvedFile !== resolvedRoot) {
+      // Pattern escapes project root — misconfiguration or attack; surface it rather than silently skip
+      throw new Error(`dotenv pattern "${pattern}" resolves outside project root: ${resolvedFile}`);
+    }
     if (!fs.existsSync(filePath)) continue;
 
     const content = fs.readFileSync(filePath, 'utf-8');

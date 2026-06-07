@@ -14,8 +14,13 @@ export function getSignatureKey(): Buffer {
   if (!fs.existsSync(SIGNATURE_KEY_PATH)) {
     const key = randomBytes(32);
     fs.mkdirSync(path.dirname(SIGNATURE_KEY_PATH), { recursive: true });
-    fs.writeFileSync(SIGNATURE_KEY_PATH, key);
-    fs.chmodSync(SIGNATURE_KEY_PATH, 0o600);
+    // Write with mode 0o600 atomically using open flags to avoid race window before chmod
+    const fd = fs.openSync(SIGNATURE_KEY_PATH, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
+    try {
+      fs.writeSync(fd, key);
+    } finally {
+      fs.closeSync(fd);
+    }
     return key;
   }
   return fs.readFileSync(SIGNATURE_KEY_PATH);
@@ -39,7 +44,7 @@ export function verifySignature(content: string, timestamp: string, signature: s
 
 export function encryptAES(content: string, password: string): string {
   const salt = randomBytes(16);
-  const key = scryptSync(password, salt, 32);
+  const key = scryptSync(password, salt, 32, { N: 65536, r: 8, p: 1, maxmem: 128 * 1024 * 1024 });
   const iv = randomBytes(16);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
 
@@ -55,8 +60,11 @@ export function decryptAES(encrypted: string, password: string): string {
   if (parts.length !== 4) throw new Error('Invalid encrypted format');
 
   const [saltHex, ivHex, authTagHex, encryptedData] = parts;
+  if (![saltHex, ivHex, authTagHex, encryptedData].every(p => /^[0-9a-f]+$/i.test(p))) {
+    throw new Error('Invalid encrypted format: non-hex segment');
+  }
   const salt = Buffer.from(saltHex, 'hex');
-  const key = scryptSync(password, salt, 32);
+  const key = scryptSync(password, salt, 32, { N: 65536, r: 8, p: 1, maxmem: 128 * 1024 * 1024 });
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
 
