@@ -1,6 +1,6 @@
 {
   "name": "@hyphen-network/devassets",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Developer asset management system for independent developers",
   "type": "module",
   "bin": {
@@ -33,7 +33,9 @@
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "js-yaml": "^4.1.0",
+    "listr2": "^10.2.1",
     "open": "^10.1.0",
+    "ora": "^9.4.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -48,7 +50,13 @@
   "engines": {
     "node": ">=22.5.0"
   },
-  "keywords": ["devtools", "assets", "environment", "mcp", "cli"],
+  "keywords": [
+    "devtools",
+    "assets",
+    "environment",
+    "mcp",
+    "cli"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -3,6 +3,7 @@ import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { exportManifest, generateOutputPath } from '../core/exporter.js';
 import { formatExportHuman } from '../core/formatter.js';
 import { logger } from '../utils/logger.js';
+import { createSpinner } from '../utils/spinner.js';
 import type { ManifestFormat } from '../types/index.js';
 
 interface ExportOptions {
@@ -23,6 +24,8 @@ export function exportCommand(projectId: string, options: ExportOptions) {
 
   const environment = options.env ?? 'production';
   const format = (options.format ?? 'manifest') as ManifestFormat;
+
+  const sp = createSpinner(`Building ${format} for ${project.name}…`, !options.stdout).start();
 
   try {
     const assets = getAssets(projectId, environment);
@@ -56,9 +59,10 @@ export function exportCommand(projectId: string, options: ExportOptions) {
       return;
     }
 
+    sp.succeed(`Export complete: ${project.name}`);
     console.log(formatExportHuman(result));
   } catch (err) {
-    logger.error(`Export failed: ${err instanceof Error ? err.message : err}`);
+    sp.fail(`Export failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
   }
 }

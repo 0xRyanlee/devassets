@@ -1,10 +1,14 @@
 import chalk from 'chalk';
-import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs } from '../db/queries.js';
+import fs from 'fs';
+import { Listr } from 'listr2';
+import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { validateAssets } from '../core/validator.js';
+import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
 
 interface DoctorOptions {
   json?: boolean;
+  fix?: boolean;
 }
 
 export interface DoctorReport {
@@ -44,11 +48,27 @@ interface RecentActivity {
   result: string;
 }
 
-export function doctorCommand(options: DoctorOptions) {
+export async function doctorCommand(options: DoctorOptions) {
   const projects = listProjects();
 
   if (projects.length === 0) {
     logger.warn('No projects registered. Run: devassets add-project <name> --path=<path>');
+    return;
+  }
+
+  if (options.fix) {
+    const dead = await runDoctorFix(projects, !!options.json);
+    const report = buildDoctorReport(listProjects());
+    if (options.json) {
+      console.log(JSON.stringify({ ...report, deadPaths: dead }, null, 2));
+    } else {
+      printDoctorReport(report);
+      if (dead.length > 0) {
+        console.log(chalk.yellow(`${dead.length} project(s) have missing paths: ${dead.join(', ')}`));
+        console.log(chalk.gray('Re-add with the correct path: devassets add-project <name> --path=<path>'));
+        console.log('');
+      }
+    }
     return;
   }
 
@@ -60,6 +80,34 @@ export function doctorCommand(options: DoctorOptions) {
   }
 
   printDoctorReport(report);
+}
+
+async function runDoctorFix(projects: ReturnType<typeof listProjects>, silent: boolean): Promise<string[]> {
+  const dead: string[] = [];
+
+  const tasks = new Listr(
+    projects.map(p => ({
+      title: `Re-scan ${p.id}`,
+      task: (_ctx: unknown, task: { title: string; skip: (msg: string) => void }) => {
+        if (!fs.existsSync(p.path)) {
+          dead.push(p.id);
+          task.skip(`${p.id}: path missing (${p.path})`);
+          return;
+        }
+        const result = scanProject(p.id, p.path);
+        replaceAssets(p.id, result.assets);
+        for (const platform of result.detectedPlatforms) {
+          upsertPaymentPlatform({ projectId: p.id, name: platform, status: 'unconfigured' });
+        }
+        addAuditLog({ projectId: p.id, action: 'scan', user: getCurrentUser(), timestamp: result.scannedAt, details: { via: 'doctor-fix', assetsFound: result.assets.length }, result: 'success' });
+        task.title = `${p.id}: ${result.assets.length} assets refreshed`;
+      },
+    })),
+    { concurrent: false, renderer: silent ? 'silent' : 'default' }
+  );
+
+  await tasks.run();
+  return dead;
 }
 
 export function buildDoctorReport(projects: ReturnType<typeof listProjects>): DoctorReport {

@@ -4,6 +4,7 @@ import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
 import { formatCheckHuman, formatCheckJson } from '../core/formatter.js';
 import { logger } from '../utils/logger.js';
+import { createSpinner } from '../utils/spinner.js';
 import type { PaymentStatus } from '../types/index.js';
 
 interface CheckOptions {
@@ -20,6 +21,9 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     process.exit(1);
   }
 
+  const active = options.format !== 'json';
+  const sp = createSpinner(`Checking ${project.name}…`, active).start();
+
   try {
     const assets = getAssets(projectId, options.env);
     const platforms = getPaymentPlatforms(projectId);
@@ -28,6 +32,7 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
 
     const paymentStatuses: PaymentStatus[] = [];
     for (const platform of platforms) {
+      sp.text = `Checking ${platform.name} status…`;
       if (platform.name === 'paddle') {
         paymentStatuses.push(await checkPaddleStatus(projectId, process.env.PADDLE_API_KEY));
       } else if (platform.name === 'stripe') {
@@ -38,6 +43,8 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     if (paymentStatuses.length > 0) {
       result = mergePaymentRisks(result, paymentStatuses);
     }
+
+    sp.stop();
 
     addAuditLog({
       projectId,
@@ -58,7 +65,7 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
       process.exit(1);
     }
   } catch (err) {
-    logger.error(`Check failed: ${err instanceof Error ? err.message : err}`);
+    sp.fail(`Check failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
   }
 }

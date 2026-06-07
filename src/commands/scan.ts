@@ -1,6 +1,7 @@
 import { getProject, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
+import { createSpinner } from '../utils/spinner.js';
 
 interface ScanOptions {
   json?: boolean;
@@ -13,6 +14,8 @@ export function scanCommand(projectId: string, options: ScanOptions) {
     logger.raw('Run: devassets add-project <name> --path=<path>');
     process.exit(1);
   }
+
+  const sp = createSpinner(`Scanning ${project.name}…`, !options.json).start();
 
   try {
     const result = scanProject(projectId, project.path);
@@ -45,7 +48,7 @@ export function scanCommand(projectId: string, options: ScanOptions) {
       return;
     }
 
-    logger.success(`Scan complete: ${project.name}`);
+    sp.succeed(`Scan complete: ${project.name}`);
     logger.raw(`  Env files: ${result.envFilesFound.join(', ') || 'none'}`);
     logger.raw(`  Assets:    ${result.assets.length}`);
     logger.raw(`  Platforms: ${result.detectedPlatforms.join(', ') || 'none detected'}`);
@@ -60,7 +63,7 @@ export function scanCommand(projectId: string, options: ScanOptions) {
       details: { error: String(err) },
       result: 'failure',
     });
-    logger.error(`Scan failed: ${err instanceof Error ? err.message : err}`);
+    sp.fail(`Scan failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
   }
 }

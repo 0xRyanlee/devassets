@@ -191,6 +191,15 @@ describe('CLI: doctor', () => {
     const { healthy, warning, critical, total } = report.summary;
     expect(healthy + warning + critical).toBe(total);
   });
+
+  it('--fix re-scans projects and reports', () => {
+    const { stdout, status } = cli('doctor --fix --json');
+    expect(status).toBe(0);
+    const report = JSON.parse(stdout);
+    expect(report).toHaveProperty('deadPaths');
+    expect(Array.isArray(report.deadPaths)).toBe(true);
+    expect(report).toHaveProperty('summary');
+  });
 });
 
 describe('CLI: error handling', () => {
