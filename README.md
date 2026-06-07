@@ -1,6 +1,6 @@
 # DevAssets - 开发资产管理系统
 
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.5%2B-green)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
@@ -50,7 +50,27 @@ devassets audit legita --since=7d
 
 # 启动 Dashboard
 devassets ui --port=9090
+
+# 启动 MCP Server（供 Claude Code / Cursor 等调用）
+devassets serve
 ```
+
+### Claude Code / MCP 集成
+
+安装后在项目的 `.claude/settings.json` 添加：
+
+```json
+{
+  "mcpServers": {
+    "devassets": {
+      "command": "devassets",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+之后 AI 可直接调用：`devassets_check`、`devassets_export`、`devassets_health` 等 8 个工具。
 
 ## 核心特性
 
