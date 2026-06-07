@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — 2026-06-08
+
+### Features — secret location annotation (Axis B, `.devassets.yml`)
+
+Completes the hybrid classification model: heuristics by default, `.devassets.yml` for precise overrides.
+
+- New `secrets:` map in `.devassets.yml` declares where each key lives:
+  `local-env` (default) / `cloud-platform` / `ci-secret` / `runtime-user` / `source-public` / `external-vault`.
+- Keys declared as non-`local-env` show as **managed** (☁) — never falsely reported missing.
+  Closes the "cloud/CI/runtime/desktop secret isn't local but that's correct" gap.
+- Managed keys declared only in `.devassets.yml` (in no file) still surface for visibility.
+- New `managed` asset status + count, shown in `check` output, dashboard stat cards, and badges.
+- 3 new scanner tests; 88 total pass.
+
 ## 0.5.0 — 2026-06-08
 
 ### Features — monorepo support (3-layer scan-root resolution)

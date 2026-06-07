@@ -98,3 +98,41 @@ describe('scanProject — example/required key detection', () => {
     expect(configured).not.toContain('STRIPE_SECRET_KEY');
   });
 });
+
+describe('scanProject — .devassets.yml managed locations (Axis B)', () => {
+  const MG = path.join(os.tmpdir(), 'devassets-test-managed');
+
+  beforeAll(() => {
+    fs.mkdirSync(MG, { recursive: true });
+    fs.writeFileSync(path.join(MG, '.env'), 'DATABASE_URL=x\n');
+    fs.writeFileSync(path.join(MG, '.env.example'), 'DATABASE_URL=\nVERCEL_TOKEN=\nSTRIPE_SECRET_KEY=\n');
+    fs.writeFileSync(path.join(MG, '.devassets.yml'), [
+      'secrets:',
+      '  VERCEL_TOKEN: cloud-platform',
+      '  GITHUB_TOKEN: ci-secret',
+      '  STRIPE_SECRET_KEY: local-env',
+    ].join('\n'));
+  });
+
+  afterAll(() => fs.rmSync(MG, { recursive: true, force: true }));
+
+  it('declared cloud/ci keys absent locally become managed, not missing', () => {
+    const result = scanProject('mg', MG);
+    const vercel = result.assets.find(a => a.name === 'VERCEL_TOKEN');
+    expect(vercel?.status).toBe('managed');
+    expect(vercel?.location).toBe('cloud-platform');
+  });
+
+  it('managed key declared only in .devassets.yml (no file) still surfaces', () => {
+    const result = scanProject('mg', MG);
+    const gh = result.assets.find(a => a.name === 'GITHUB_TOKEN');
+    expect(gh?.status).toBe('managed');
+    expect(gh?.location).toBe('ci-secret');
+  });
+
+  it('local-env declared key stays missing when absent', () => {
+    const result = scanProject('mg', MG);
+    const stripe = result.assets.find(a => a.name === 'STRIPE_SECRET_KEY');
+    expect(stripe?.status).toBe('missing');
+  });
+});

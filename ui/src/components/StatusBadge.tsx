@@ -1,7 +1,7 @@
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 
-const variantMap: Record<string, 'healthy' | 'warning' | 'critical' | 'muted'> = {
+const variantMap: Record<string, 'healthy' | 'warning' | 'critical' | 'muted' | 'default'> = {
   healthy: 'healthy',
   configured: 'healthy',
   connected: 'healthy',
@@ -11,6 +11,7 @@ const variantMap: Record<string, 'healthy' | 'warning' | 'critical' | 'muted'> =
   error: 'critical',
   disconnected: 'critical',
   unconfigured: 'muted',
+  managed: 'default',
 };
 
 export function StatusBadge({ status, size = 'md' }: { status: string; size?: 'sm' | 'md' }) {

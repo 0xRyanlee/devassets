@@ -21,6 +21,7 @@ export function statusIcon(status: string): string {
     case 'disconnected': return chalk.red('❌');
     case 'warning':
     case 'error': return chalk.yellow('🟡');
+    case 'managed': return chalk.blue('☁');
     default: return chalk.gray('○');
   }
 }

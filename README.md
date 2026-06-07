@@ -163,6 +163,29 @@ Credential Identities — company-app
 
 ---
 
+## `.devassets.yml` (optional, per project)
+
+Zero-config works for most projects. Drop a `.devassets.yml` at the project root only when you need to be explicit:
+
+```yaml
+# Monorepo scan roots (else auto-detected from workspace manifest or discovery)
+roots:
+  - web
+  - api
+
+# Where each secret actually lives — so cloud/CI/runtime secrets aren't flagged "missing"
+secrets:
+  VERCEL_TOKEN: cloud-platform        # managed in the Vercel dashboard
+  SUPABASE_SERVICE_ROLE_KEY: cloud-platform
+  APPLE_PRIVATE_KEY: ci-secret        # GitHub Actions secret
+  ANTHROPIC_API_KEY: runtime-user     # end-user provides at runtime
+  PADDLE_CLIENT_TOKEN: source-public  # publishable, lives in source
+  # unlisted keys default to local-env (normal missing-detection)
+```
+
+Locations: `local-env` (default) · `cloud-platform` · `ci-secret` · `runtime-user` · `source-public` · `external-vault`.
+Non-`local-env` keys show as **managed** (☁) instead of missing — closing the "the token isn't local but that's correct" gap for desktop/mobile/cloud-deployed projects.
+
 ## Web Dashboard
 
 ```bash

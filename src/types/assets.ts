@@ -1,4 +1,5 @@
-export type AssetStatus = 'configured' | 'missing' | 'error' | 'warning';
+export type AssetStatus = 'configured' | 'missing' | 'error' | 'warning' | 'managed';
+export type SecretLocation = 'local-env' | 'cloud-platform' | 'ci-secret' | 'runtime-user' | 'source-public' | 'external-vault';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type ProjectType = 'saas' | 'mobile' | 'desktop' | 'library' | 'other';
 export type Environment = 'development' | 'staging' | 'production';
@@ -73,6 +74,7 @@ export interface CheckResult {
     configured: number;
     missing: number;
     errors: number;
+    managed: number;
   };
   categories: {
     environmentVariables: AssetStatusDetail[];

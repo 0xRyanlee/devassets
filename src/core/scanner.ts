@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { scanEnvKeys, scanDeclaredKeys, getEnvFiles } from '../utils/dotenv.js';
-import { resolveScanRoots } from './roots.js';
+import { resolveScanRoots, readKeyLocations } from './roots.js';
 import { PAYMENT_PLATFORM_KEY_PATTERNS } from '../utils/constants.js';
 import type { Asset, PaymentPlatformName } from '../types/index.js';
 
@@ -22,9 +22,17 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
 
   const now = new Date().toISOString();
   const roots = resolveScanRoots(projectPath);
+  const locations = readKeyLocations(projectPath);
   const assets: Omit<Asset, 'id'>[] = [];
   const envFilesFound: string[] = [];
   const allNames: string[] = [];
+  const configuredNames = new Set<string>();
+  const addedManaged = new Set<string>();
+
+  const isManaged = (name: string) => {
+    const loc = locations[name];
+    return loc !== undefined && loc !== 'local-env';
+  };
 
   for (const root of roots) {
     const rootAbs = path.join(projectPath, root);
@@ -37,6 +45,7 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
     envFilesFound.push(...getEnvFiles(rootAbs).map(f => `${prefix}${f}`));
 
     for (const k of keys) {
+      configuredNames.add(k.name);
       assets.push({
         projectId,
         name: k.name,
@@ -47,20 +56,27 @@ export function scanProject(projectId: string, projectPath: string): ScanResult 
       });
     }
 
-    // Keys declared in this root's example files but absent from this root's actual env → missing
-    const seenMissing = new Set<string>();
+    // Declared in example but absent from actual env → managed (if declared elsewhere) or missing
+    const seen = new Set<string>();
     for (const d of declared) {
-      if (presentNames.has(d.name) || seenMissing.has(d.name)) continue;
-      seenMissing.add(d.name);
-      assets.push({
-        projectId,
-        name: d.name,
-        location: `${prefix}${d.file}:${d.line}`,
-        status: 'missing',
-        environment: undefined,
-        lastSeen: now,
-      });
+      if (presentNames.has(d.name) || seen.has(d.name)) continue;
+      seen.add(d.name);
+      if (isManaged(d.name)) {
+        if (addedManaged.has(d.name)) continue;
+        addedManaged.add(d.name);
+        assets.push({ projectId, name: d.name, location: locations[d.name], status: 'managed', environment: undefined, lastSeen: now });
+      } else {
+        assets.push({ projectId, name: d.name, location: `${prefix}${d.file}:${d.line}`, status: 'missing', environment: undefined, lastSeen: now });
+      }
     }
+  }
+
+  // Keys declared only in .devassets.yml as managed (not in any file) → still surface for visibility
+  for (const [name, loc] of Object.entries(locations)) {
+    if (loc === 'local-env' || configuredNames.has(name) || addedManaged.has(name)) continue;
+    addedManaged.add(name);
+    allNames.push(name);
+    assets.push({ projectId, name, location: loc, status: 'managed', environment: undefined, lastSeen: now });
   }
 
   return {

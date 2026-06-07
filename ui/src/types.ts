@@ -43,7 +43,7 @@ export interface CheckResult {
   environment?: string;
   timestamp: string;
   status: ProjectStatus;
-  assets: { total: number; configured: number; missing: number; errors: number };
+  assets: { total: number; configured: number; missing: number; errors: number; managed: number };
   risks: RiskItem[];
   suggestions: string[];
 }

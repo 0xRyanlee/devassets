@@ -8,6 +8,7 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
   const missing = filtered.filter(a => a.status === 'missing');
   const errors = filtered.filter(a => a.status === 'error');
   const configured = filtered.filter(a => a.status === 'configured');
+  const managed = filtered.filter(a => a.status === 'managed');
 
   const risks: RiskItem[] = [];
 
@@ -55,6 +56,7 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
       configured: configured.length,
       missing: missing.length,
       errors: errors.length,
+      managed: managed.length,
     },
     categories: {
       environmentVariables: filtered.map(a => ({

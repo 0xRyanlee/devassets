@@ -47,6 +47,18 @@ function dedupeWithRoot(projectPath: string, roots: string[]): string[] {
   return [...set];
 }
 
+// Per-key secret location declarations from .devassets.yml `secrets:` (Axis B)
+export function readKeyLocations(projectPath: string): Record<string, string> {
+  const file = path.join(projectPath, '.devassets.yml');
+  if (!fs.existsSync(file)) return {};
+  try {
+    const doc = yaml.load(fs.readFileSync(file, 'utf-8')) as { secrets?: Record<string, string> } | null;
+    return doc?.secrets ?? {};
+  } catch {
+    return {};
+  }
+}
+
 // Layer 1 — explicit declaration
 function readDevassetsRoots(projectPath: string): string[] {
   const file = path.join(projectPath, '.devassets.yml');

@@ -13,7 +13,8 @@ export function formatCheckHuman(result: CheckResult): string {
   lines.push(`Status: ${statusColor(result.status.toUpperCase())}`);
   lines.push('');
 
-  lines.push(chalk.bold(`Assets (${result.assets.configured} configured, ${result.assets.missing} missing, ${result.assets.errors} errors):`));
+  const managedPart = result.assets.managed > 0 ? `, ${result.assets.managed} managed` : '';
+  lines.push(chalk.bold(`Assets (${result.assets.configured} configured, ${result.assets.missing} missing, ${result.assets.errors} errors${managedPart}):`));
   for (const a of result.categories.environmentVariables) {
     lines.push(`  ${statusIcon(a.status)} ${a.name.padEnd(40)} ${chalk.gray(a.location)}`);
   }

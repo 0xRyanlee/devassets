@@ -52,11 +52,12 @@ export default function ProjectDetail() {
         <StatusBadge status={project.status} />
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Total', value: checkResult.assets.total, color: 'text-foreground' },
           { label: 'Configured', value: checkResult.assets.configured, color: 'text-green-400' },
           { label: 'Missing', value: checkResult.assets.missing, color: 'text-red-400' },
+          { label: 'Managed', value: checkResult.assets.managed ?? 0, color: 'text-sky-400' },
           { label: 'Errors', value: checkResult.assets.errors, color: 'text-amber-400' },
         ].map(({ label, value, color }) => (
           <Card key={label}>
