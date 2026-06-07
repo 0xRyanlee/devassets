@@ -2,6 +2,11 @@
 
 这份指南帮助 Claude Code 快速理解项目架构并开始开发。
 
+> **注意（历史文档）**：本文是最初的 Week 1–7 构建计划，里程碑均已完成。下方的代码结构树和
+> 周计划反映的是早期设想（例如曾计划用 Drizzle、src/skills/*.ts）。**当前实际架构、模块划分、
+> MCP 工具清单、分类模型请以 [ARCHITECTURE.md](./ARCHITECTURE.md) 与 README 为准。**
+> 新增能力（identity 解析、monorepo roots、三轴分类、providers/）见 ARCHITECTURE.md。
+
 ---
 
 ## 项目概览
@@ -13,7 +18,7 @@
 > - SQLite 实现：Node.js 内置 `node:sqlite`（替代 better-sqlite3，不需要原生编译，Node 22.5+）
 > - Stripe/Apple IAP/Google Play：不实现（Paddle 完整，其他预留占位）
 > - 扫描策略：全动态扫描，无预定义项目
-> - npm scope：`@sparkie/devassets`
+> - npm scope：`@hyphen-network/devassets`
 
 ```
 用户
@@ -131,10 +136,10 @@ devassets/
 
 1. 初始化项目
    npm init -y
-   npm install typescript ts-node @types/node
-   npm install sqlite3 drizzle-orm
+   npm install typescript tsx @types/node
+   # 数据库用 Node 内置 node:sqlite，无需安装 better-sqlite3/drizzle
    npm install commander             # CLI 框架
-   npm install dotenv yaml           # 文件解析
+   npm install js-yaml               # .env.example / .devassets.yml 解析
 
 2. 定义数据类型 (src/types/assets.ts)
    - Asset interface
@@ -353,7 +358,7 @@ devassets/
    - 文档发布到网站
 
 完成指标:
-  ✅ npm install -g @sparkie/devassets
+  ✅ npm install -g @hyphen-network/devassets
   ✅ 所有功能可用
   ✅ 文档完整
 ```

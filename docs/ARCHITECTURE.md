@@ -4,11 +4,19 @@
 
 ```
 devassets/
-├── src/           TypeScript source (CLI + MCP server + Express API)
-├── ui/            React Dashboard (Vite + Tailwind)
-├── dist/          Compiled CLI (node dist/index.js)
-├── tests/         Unit + integration tests (vitest)
-└── docs/          Design documents
+├── src/
+│   ├── cli.ts                 Commander entry — 13 commands
+│   ├── commands/              One file per CLI command
+│   ├── core/                  scanner, validator, exporter, identity, roots
+│   ├── integrations/          paddle, stripe + providers/ (vercel, supabase, neon, npm, gcloud)
+│   ├── db/                    node:sqlite schema + queries
+│   ├── mcp/                   MCP server (12 tools) + skills loader
+│   ├── types/                 assets, export, identity
+│   └── utils/                 crypto, dotenv, constants (classifyKey), spinner, logger
+├── ui/                        React 18 + Vite + Tailwind + shadcn/ui dashboard
+├── skills/                    Claude Code slash commands (devassets-check, devassets-ci)
+├── tests/                     vitest unit + integration (92 tests)
+└── docs/                      Design + research documents
 ```
 
 ## Runtime Stack
@@ -17,46 +25,49 @@ devassets/
 |---|---|---|
 | CLI | Commander.js | `devassets <command>` |
 | Language | TypeScript → ESM | Node 22.5+ |
-| Database | `node:sqlite` (built-in) | `~/.devassets/devassets.db` |
+| Database | `node:sqlite` (built-in) | no native compile; `~/.devassets/devassets.db` |
 | MCP Server | `@modelcontextprotocol/sdk` | stdio transport |
-| Dashboard Backend | Express.js | serves UI + REST API |
-| Dashboard Frontend | React 18 + Vite + Tailwind CSS | compiled to `ui/dist/` |
-| Signing | HMAC-SHA256 (`node:crypto`) | key at `~/.devassets/signature.key` |
-| Encryption | AES-256-GCM (`node:crypto`) | password-derived key via scrypt |
+| Dashboard Backend | Express.js (127.0.0.1 only) | serves UI + REST API |
+| Dashboard Frontend | React 18 + Vite + Tailwind + shadcn/ui | compiled to `ui/dist/` |
+| Signing | HMAC-SHA256 (`node:crypto`) | key at `~/.devassets/signature.key` (0600, atomic) |
+| Encryption | AES-256-GCM (`node:crypto`) | scrypt N=65536 |
+
+## Core pipeline
+
+1. **roots** (`core/roots.ts`) — resolve scan roots: `.devassets.yml roots:` → workspace manifest → smart discovery (monorepo-aware).
+2. **scanner** (`core/scanner.ts`) — per root, read env key *names* (configured) and `.env.example` declarations (missing); `.devassets.yml secrets:` → managed. Locations are scope-prefixed (`web/.env:8`).
+3. **classification** (`utils/constants.ts classifyKey`) — Axis A: public / secret / identifier / config.
+4. **validator** (`core/validator.ts`) — severity from sensitivity + environment + project form (Axis C); managed never risks.
+5. **identity** (`core/identity.ts` + `integrations/providers/`) — transiently read token values across roots, resolve account/workspace/projects via provider APIs, store metadata (never the token); `--pin` baselines expected identity for mismatch detection.
+
+## Classification model (3 axes)
+
+- **A — sensitivity**: `classifyKey` (public prefix overrides; DATABASE_URL = secret; *_ID = identifier).
+- **B — location**: `.devassets.yml secrets:` → local-env (default) / cloud-platform / ci-secret / runtime-user / source-public / external-vault. Non-local → `managed`.
+- **C — form**: project `type` relaxes missing-secret severity for desktop/mobile/library.
 
 ## Data Storage (all local, no cloud)
 
 ```
 ~/.devassets/
-  devassets.db        SQLite database (projects, assets, payments, audit)
+  devassets.db        projects, assets, payment_platforms, credential_identities, audit_logs
   signature.key       32-byte HMAC signing key (chmod 600)
   permissions.yml     RBAC configuration
 ```
 
-## MCP Integration (AI Interface)
+`credential_identities` stores resolved account/workspace/projects/validity + pinned expectations — **never token values**.
 
-`devassets serve` starts a stdio MCP server. Configure once in Claude Code:
+## MCP Tools (12)
 
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "devassets": {
-      "command": "devassets",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-MCP Tools: `devassets_list_projects`, `devassets_check`, `devassets_scan`,
-`devassets_export`, `devassets_health`, `devassets_audit`, `devassets_rotate`,
-`devassets_add_project`
+`devassets_list_projects`, `devassets_check`, `devassets_scan`, `devassets_identity`,
+`devassets_export`, `devassets_health`, `devassets_doctor`, `devassets_audit`,
+`devassets_rotate`, `devassets_add_project`, `devassets_ci_snippet`, `devassets_skills`
 
 ## Security Invariants
 
-1. **No secret values stored** — only key names, locations, and status
-2. **No secret values in logs** — audit logs contain metadata only
-3. **All exports signed** — HMAC-SHA256 with local key
-4. **Encryption is opt-in** — AES-256-GCM, password never stored
-5. **No network by default** — Paddle API calls only when explicitly triggered
+1. **No secret values stored** — only key names, resolved metadata, and status.
+2. **Transient value reads** — `identity`/`check` read a value in-memory to call a provider, then discard it (the single scoped exception); never written to disk or logs.
+3. **All exports signed** — HMAC-SHA256 with local key.
+4. **Encryption opt-in** — AES-256-GCM, password never stored.
+5. **No network by default** — provider API calls only when `check`/`identity` are explicitly run.
+6. **Dashboard localhost-only** — 127.0.0.1 bind, CORS restricted.
