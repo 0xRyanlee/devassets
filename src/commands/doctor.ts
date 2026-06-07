@@ -117,7 +117,7 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
 
   for (const project of projects) {
     const assets = getAssets(project.id);
-    const result = validateAssets(assets, project.id);
+    const result = validateAssets(assets, project.id, undefined, project.type);
     const lastLog = getAuditLogs(project.id, 30)[0];
 
     projectHealths.push({

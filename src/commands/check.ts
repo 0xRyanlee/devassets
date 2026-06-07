@@ -29,7 +29,7 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     const assets = getAssets(projectId, options.env);
     const platforms = getPaymentPlatforms(projectId);
 
-    let result = validateAssets(assets, projectId, options.env);
+    let result = validateAssets(assets, projectId, options.env, project.type);
 
     const paymentStatuses: PaymentStatus[] = [];
     for (const platform of platforms) {

@@ -13,7 +13,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.6.0',
+    version: '0.7.0',
   });
 
   server.tool(
@@ -24,7 +24,7 @@ export async function startMcpServer() {
       const projects = listProjects();
       const enriched = projects.map(p => {
         const assets = getAssets(p.id);
-        const result = validateAssets(assets, p.id);
+        const result = validateAssets(assets, p.id, undefined, p.type);
         return { id: p.id, name: p.name, path: p.path, type: p.type, status: result.status, assetCount: assets.length };
       });
       return { content: [{ type: 'text', text: JSON.stringify(enriched, null, 2) }] };
@@ -43,7 +43,7 @@ export async function startMcpServer() {
       if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
 
       const assets = getAssets(projectId, environment);
-      let result = validateAssets(assets, projectId, environment);
+      let result = validateAssets(assets, projectId, environment, project.type);
 
       const platforms = getPaymentPlatforms(projectId);
       const paymentStatuses = [];
@@ -111,7 +111,7 @@ export async function startMcpServer() {
       }
 
       const assets = getAssets(projectId, environment);
-      const checkResult = validateAssets(assets, projectId, environment);
+      const checkResult = validateAssets(assets, projectId, environment, project.type);
       const outputPath = output_path ?? generateOutputPath(projectId, environment, format);
 
       const result = exportManifest(checkResult, {
@@ -137,7 +137,7 @@ export async function startMcpServer() {
       const summaries = projects.map(p => {
         if (!p) return null;
         const assets = getAssets(p.id);
-        const result = validateAssets(assets, p.id);
+        const result = validateAssets(assets, p.id, undefined, p.type);
         const topRisks = result.risks
           .filter(r => !focus || r.asset.toLowerCase().includes(focus.toLowerCase()))
           .slice(0, 3);

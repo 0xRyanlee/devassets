@@ -30,7 +30,7 @@ export function exportCommand(projectId: string, options: ExportOptions) {
   try {
     const assets = getAssets(projectId, environment);
     const platforms = getPaymentPlatforms(projectId);
-    let checkResult = validateAssets(assets, projectId, environment);
+    let checkResult = validateAssets(assets, projectId, environment, project.type);
     if (platforms.length > 0) checkResult = mergePaymentRisks(checkResult, []);
 
     const outputPath = options.stdout ? undefined :

@@ -1,7 +1,12 @@
 import type { Asset, RiskItem, RiskLevel, CheckResult, PaymentStatus } from '../types/index.js';
 import { API_KEY_ROTATION_THRESHOLD_DAYS, API_KEY_WARNING_THRESHOLD_DAYS, classifyKey } from '../utils/constants.js';
 
-export function validateAssets(assets: Asset[], projectId: string, environment?: string): CheckResult {
+// Forms where local .env is not the primary secret store — desktop/mobile/library secrets
+// usually live in CI, the OS keystore, or are provided at runtime. Missing-secret severity
+// is relaxed (not critical) and the user is nudged to annotate locations in .devassets.yml.
+const RELAXED_FORMS = new Set(['desktop', 'mobile', 'library']);
+
+export function validateAssets(assets: Asset[], projectId: string, environment?: string, projectType?: string): CheckResult {
   const now = new Date().toISOString();
   const filtered = environment ? assets.filter(a => !a.environment || a.environment === environment) : assets;
 
@@ -9,23 +14,27 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
   const errors = filtered.filter(a => a.status === 'error');
   const configured = filtered.filter(a => a.status === 'configured');
   const managed = filtered.filter(a => a.status === 'managed');
+  const relaxed = !!projectType && RELAXED_FORMS.has(projectType);
 
   const risks: RiskItem[] = [];
 
   for (const asset of missing) {
     const isProd = environment === 'production' || asset.environment === 'production';
     const sensitivity = classifyKey(asset.name);
-    const level: RiskLevel = sensitivity === 'secret' ? (isProd ? 'critical' : 'high') : 'low';
+    let level: RiskLevel = sensitivity === 'secret' ? (isProd ? 'critical' : 'high') : 'low';
+    if (relaxed && sensitivity === 'secret') level = 'low';
     const kindLabel =
       sensitivity === 'public' ? 'public config' :
       sensitivity === 'identifier' ? 'identifier' :
       sensitivity === 'config' ? 'optional config' : 'secret';
+    const message =
+      sensitivity !== 'secret' ? `${asset.name} declared in example but not set (${kindLabel})` :
+      relaxed ? `${asset.name} not set in local env — ${projectType} apps usually manage this in CI/runtime; declare its location in .devassets.yml to confirm` :
+      `${asset.name} is missing${environment ? ` in ${environment}` : ''}`;
     risks.push({
       level,
       asset: asset.name,
-      message: sensitivity === 'secret'
-        ? `${asset.name} is missing${environment ? ` in ${environment}` : ''}`
-        : `${asset.name} declared in example but not set (${kindLabel})`,
+      message,
       suggestion: `Add ${asset.name} to ${asset.location.split(':')[0].replace(/\.example|\.sample|\.template/, '')}`,
     });
   }
@@ -63,7 +72,7 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
         name: a.name,
         status: a.status,
         location: a.location,
-        risk: getRiskForStatus(a.status, environment, a.name),
+        risk: getRiskForStatus(a.status, environment, a.name, relaxed),
       })),
       paymentPlatforms: [],
     },
@@ -72,9 +81,10 @@ export function validateAssets(assets: Asset[], projectId: string, environment?:
   };
 }
 
-function getRiskForStatus(status: string, environment?: string, name?: string): RiskLevel | undefined {
+function getRiskForStatus(status: string, environment?: string, name?: string, relaxed = false): RiskLevel | undefined {
   if (status === 'missing') {
     if (name && classifyKey(name) !== 'secret') return 'low';
+    if (relaxed) return 'low';
     return environment === 'production' ? 'critical' : 'high';
   }
   if (status === 'error') return 'high';

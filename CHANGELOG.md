@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-06-08
+
+### Features — form-aware severity (Axis C); completes the classification model
+
+The project `type` (set at `add-project`) now drives missing-secret severity:
+
+- `desktop` / `mobile` / `library`: a missing secret is **relaxed to low** (not critical) —
+  these forms manage secrets in CI, the OS keystore, or at runtime, not local `.env`.
+  The message nudges the user to declare the real location in `.devassets.yml`.
+- `saas` / `other` / web: unchanged — missing secret stays high/critical.
+- `managed` assets never produce a risk, regardless of form.
+
+This closes the desktop/mobile false-critical noise (e.g. the mindset Paddle case) without
+hiding anything. Milestone #1 (3-axis classification: sensitivity + location + form) complete.
+4 new validator tests; 92 total pass.
+
 ## 0.6.0 — 2026-06-08
 
 ### Features — secret location annotation (Axis B, `.devassets.yml`)

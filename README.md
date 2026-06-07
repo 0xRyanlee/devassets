@@ -186,6 +186,8 @@ secrets:
 Locations: `local-env` (default) · `cloud-platform` · `ci-secret` · `runtime-user` · `source-public` · `external-vault`.
 Non-`local-env` keys show as **managed** (☁) instead of missing — closing the "the token isn't local but that's correct" gap for desktop/mobile/cloud-deployed projects.
 
+**Project type matters.** The `--type` you set at `add-project` (saas/desktop/mobile/library) tunes severity: for `desktop`/`mobile`/`library`, a missing secret is relaxed to a low-severity note (these forms keep secrets in CI/keystore/runtime, not local `.env`), and you're nudged to declare its real location above. `saas`/web keep strict missing-secret detection.
+
 ## Web Dashboard
 
 ```bash

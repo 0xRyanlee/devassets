@@ -30,7 +30,7 @@ export function uiCommand(options: UiOptions) {
       const projects = listProjects();
       const enriched = projects.map(p => {
         const assets = getAssets(p.id);
-        const result = validateAssets(assets, p.id);
+        const result = validateAssets(assets, p.id, undefined, p.type);
         return { ...p, status: result.status, assetCount: assets.length };
       });
       res.json(enriched);
@@ -45,7 +45,7 @@ export function uiCommand(options: UiOptions) {
       if (!project) { res.status(404).json({ error: 'Not found' }); return; }
       const assets = getAssets(req.params.id);
       const platforms = getPaymentPlatforms(req.params.id);
-      const checkResult = validateAssets(assets, req.params.id);
+      const checkResult = validateAssets(assets, req.params.id, undefined, project.type);
       const identities = getCredentialIdentities(req.params.id);
       res.json({ ...project, checkResult, platforms, identities });
     } catch (err) {
