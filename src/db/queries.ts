@@ -37,8 +37,9 @@ export function deleteProject(id: string) {
 
 export function getAssets(projectId: string, environment?: string): Asset[] {
   const db = getDb();
+  // include assets tagged for this environment OR with no environment tag (applies to all envs)
   const rows = environment
-    ? (db.prepare('SELECT * FROM assets WHERE project_id=? AND environment=?').all(projectId, environment) as Row[])
+    ? (db.prepare('SELECT * FROM assets WHERE project_id=? AND (environment=? OR environment IS NULL)').all(projectId, environment) as Row[])
     : (db.prepare('SELECT * FROM assets WHERE project_id=?').all(projectId) as Row[]);
   return rows.map(r => ({
     id: r['id'] as number,

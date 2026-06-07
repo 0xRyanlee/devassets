@@ -1,63 +1,148 @@
-# DevAssets - 开发资产管理系统
+# DevAssets
 
-[![Node.js](https://img.shields.io/badge/Node.js-22.5%2B-green)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+**Unified developer asset management for independent builders.**
 
-**一句话**: 为独立开发者设计的多项目开发资产统一管理系统。在一个地方统一管理 10+ 个项目的环境变量、API 接口、支付平台，支持智能导出和加密分享。
+Track environment variables, API keys, and payment platform health across all your projects — with signed exports, audit logs, and native AI integration via MCP.
 
-## 快速开始
+[![npm](https://img.shields.io/npm/v/@ryan910814/devassets)](https://www.npmjs.com/package/@ryan910814/devassets)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.5.0-brightgreen)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-### 安装
+---
+
+## The Problem
+
+You have 10+ projects. Each has `.env` files, API keys, Paddle webhooks, Stripe secrets. Before every deploy you're mentally running through a checklist: *Is the webhook registered? When did I last rotate that key? Is the staging database URL correct?*
+
+DevAssets solves this with a single CLI that scans, checks, exports, and audits — without ever storing your secret values.
+
+---
+
+## Features
+
+- **Zero secret storage** — scans key *names* only, never values
+- **Project health dashboard** — status across all projects at a glance
+- **Signed manifests** — HMAC-SHA256 signed exports you can verify later
+- **Optional encryption** — AES-256-GCM for sharing sensitive checklists
+- **Paddle integration** — webhook status, API key age tracking
+- **Full audit trail** — every scan, export, and rotation logged
+- **MCP server** — AI agents (Claude Code, Cursor) can query and manage assets natively
+- **Web dashboard** — local React UI via `devassets ui`
+- **No background processes** — event-driven, runs only when called
+- **100% local** — SQLite database, no cloud sync
+
+---
+
+## Requirements
+
+- Node.js **22.5+** (uses built-in `node:sqlite`)
+
+---
+
+## Installation
 
 ```bash
-npm install -g @sparkie/devassets
+npm install -g @ryan910814/devassets
 ```
 
-### 初始化
+---
+
+## Quick Start
 
 ```bash
-# 首次使用，初始化本地数据库
+# 1. Initialize (creates ~/.devassets/ database and signing key)
 devassets init
 
-# 添加第一个项目
+# 2. Register your projects
 devassets add-project legita --path=~/projects/legita --type=saas
-```
+devassets add-project sparkie --path=~/projects/sparkie --type=desktop
 
-### 常用命令
-
-```bash
-# 扫描项目资产
+# 3. Scan environment files
 devassets scan legita
 
-# 检查项目状态
+# 4. Check health
 devassets check legita
-
-# 导出清单（默认签名）
-devassets export legita --env=production
-
-# 导出并加密（给特定人）
-devassets export legita --env=production --encrypt-for=devops@email.com
-
-# 验证清单
-devassets verify legita --manifest=./legita-production.manifest
-
-# 轮换 API key
-devassets rotate legita paddle --confirm
-
-# 查看审计日志
-devassets audit legita --since=7d
-
-# 启动 Dashboard
-devassets ui --port=9090
-
-# 启动 MCP Server（供 Claude Code / Cursor 等调用）
-devassets serve
 ```
 
-### Claude Code / MCP 集成
+```
+Project: legita
+Status: ⚠ WARNING
 
-安装后在项目的 `.claude/settings.json` 添加：
+Assets (18 configured, 1 missing, 0 errors):
+  ✅ SUPABASE_URL                           .env:1
+  ✅ SUPABASE_KEY                           .env:2
+  ✅ PADDLE_API_KEY                         .env.production:1
+  ❌ PADDLE_WEBHOOK_SECRET                  .env.production (MISSING)
+
+Payment Platforms:
+  🟡 Paddle — Webhook not verified
+
+Risks:
+  [CRITICAL] PADDLE_WEBHOOK_SECRET missing in production
+  [MEDIUM]   Paddle webhook registered but not verified active
+
+Suggestions:
+  1. Add PADDLE_WEBHOOK_SECRET to .env.production
+  2. Verify webhook endpoint in Paddle dashboard
+```
+
+---
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `devassets init` | Initialize database and signing key |
+| `devassets add-project <name>` | Register a project |
+| `devassets scan <project>` | Scan `.env` files and update asset records |
+| `devassets check <project>` | Check asset health and risks |
+| `devassets export <project>` | Export a signed manifest |
+| `devassets verify <project>` | Verify a manifest's signature |
+| `devassets rotate <project> <key>` | Record rotation intent + instructions |
+| `devassets audit <project>` | View audit log |
+| `devassets ui` | Start web dashboard at localhost:9090 |
+| `devassets serve` | Start MCP server (stdio) |
+
+### Export formats
+
+```bash
+# Signed YAML manifest (default)
+devassets export legita --env=production
+
+# Markdown checklist
+devassets export legita --env=production --format=checklist
+
+# Variable names only (reference)
+devassets export legita --env=production --format=reference-only
+
+# Encrypted (AES-256-GCM)
+devassets export legita --env=production --encrypt --encrypt-for=mypassword
+```
+
+### CI/CD integration
+
+```yaml
+# GitHub Actions — gate deploys on asset health
+- name: Check assets
+  run: devassets check ${{ env.PROJECT }} --env=production --fail-on-risk
+```
+
+---
+
+## Web Dashboard
+
+```bash
+devassets ui --port=9090
+# Opens http://localhost:9090
+```
+
+View all projects, asset tables, payment platform status, and full audit timeline in a browser UI.
+
+---
+
+## MCP Integration (Claude Code / Cursor)
+
+Add to your project's `.claude/settings.json`:
 
 ```json
 {
@@ -70,297 +155,48 @@ devassets serve
 }
 ```
 
-之后 AI 可直接调用：`devassets_check`、`devassets_export`、`devassets_health` 等 8 个工具。
+Available MCP tools:
 
-## 核心特性
+| Tool | Description |
+|---|---|
+| `devassets_list_projects` | List all projects and health status |
+| `devassets_check` | Check a project's assets and risks |
+| `devassets_scan` | Scan and update asset records |
+| `devassets_export` | Export a signed manifest |
+| `devassets_health` | Quick health summary across projects |
+| `devassets_audit` | Query audit log |
+| `devassets_rotate` | Initiate key rotation |
+| `devassets_add_project` | Register a new project |
 
-### 1. 一览无遗的资产管理
-```
-devassets check legita
-→ 一眼看到：
-  ✅ 7 个资产已配置
-  🟡 3 个警告（API key 年龄、webhook 未验证）
-  🔴 2 个关键问题（缺失配置、过期证书）
-```
+Once configured, you can ask your AI agent:
+> *"Check the production assets for legita"*
+> *"Export a signed manifest for sparkie staging"*
+> *"When was the last time I rotated the Paddle API key?"*
 
-### 2. 智能导出和加密
-```bash
-# Agent 自动判定最优导出方式
-devassets export legita --env=production
-→ 自动检查：
-  - 是否有敏感信息？
-  - 谁要用这个文件？
-  - 需不需要加密？
+---
 
-# 可选：显式指定加密策略
-devassets export legita --env=production --encrypt-for=devops@example.com
-→ 用 DevOps 的公钥加密，只有他能解密
-```
+## Security Model
 
-### 3. 无背景进程，事件驱动
-不维护后台守护进程，而是在工作流中自动触发检查：
+- **No secret values stored** — DevAssets reads key names from `.env` files, never values
+- **No secret values in logs** — audit trail contains metadata only
+- **Signed exports** — every manifest is HMAC-SHA256 signed with a local key at `~/.devassets/signature.key`
+- **Encryption is opt-in** — AES-256-GCM, password never persisted
+- **No network calls by default** — Paddle API calls only when explicitly triggered by `check`
+- **Local-only storage** — `~/.devassets/devassets.db` (SQLite), never synced to cloud
 
-```bash
-# Git hooks
-devassets install-hooks
-→ 提交前自动检查 (pre-commit)
-→ 合并后自动扫描 (post-merge)
+---
 
-# 部署前验证
-devassets check legita --fail-on-risk
-# 返回退出码，用于 CI/CD 中断构建
-
-# 手动触发
-devassets verify legita --manifest=./legita-production.manifest
-```
-
-### 4. 完整的审计日志
-```bash
-devassets audit legita --since=30d
-→ 谁什么时候：
-  - 导出了什么清单
-  - 轮换了什么 key
-  - 验证了什么资产
-  - 做了什么修改
-```
-
-### 5. Claude Code 集成
-在 Claude Code 中自动可用的 Skills：
-
-```typescript
-// 检查项目状态
-@devassets/check legita --format=markdown
-→ Agent 看到状态，自动判定下一步
-
-// 导出生产环境清单
-@devassets/export legita --env=production
-→ Skill 自动建议加密，Agent 确认对象
-
-// 快速健康检查
-@devassets/health legita --focus=payments
-→ 支付平台状态一览
-
-// 验证导出文件
-@devassets/verify legita --manifest=./legita-production.manifest
-→ 验证文件完整性和当前环境匹配度
-
-// 轮换 API key
-@devassets/rotate legita paddle
-→ Skill 显示信息，要求确认后执行
-
-// 查看操作历史
-@devassets/audit legita --since=7d
-→ 审计日志用于问题排查
-```
-
-## 工作流示例
-
-### 场景 1: 晨间站会（独立开发者的自检）
-
-```bash
-$ devassets health --focus=all
-→ 看到 12 个项目的一览表：
-  Sparkie: ✅ (Paddle webhook ❌)
-  Legita: ✅
-  MyApp iOS: ⚠️ (Key 90 days old)
-  ...
-```
-
-### 场景 2: 部署到生产
-
-```bash
-# 前置检查
-$ devassets check legita --immediate
-→ ✅ All configured, 🟡 2 warnings
-
-# 生成部署清单
-$ devassets export legita --env=production --format=checklist
-→ production-checklist.md (可读的检查清单)
-
-# 部署（CI 自动阻止有风险的部署）
-$ git push
-→ GitHub Actions 自动运行:
-  devassets check legita --fail-on-risk
-→ 如果有 critical issues，构建失败
-
-# 部署后记录
-audit log: "Ryan deployed legita to production"
-```
-
-### 场景 3: 排查 Webhook 问题
-
-```bash
-# Claude Code 问: "Legita 的 Paddle webhook 怎么了？"
-# Agent 自动运行:
-@devassets/health legita --focus=payments
-→ Paddle Webhook: ⚠️ Signature verification failed
-
-# Agent 建议修复步骤，最后验证:
-@devassets/verify legita --webhook=paddle
-→ ✅ Webhook restored
-```
-
-### 场景 4: 分享环境配置给 DevOps（未来团队场景）
-
-```bash
-# 导出（加密给 DevOps）
-$ devassets export legita --env=production --encrypt-for=devops@company.com
-→ legita-production.manifest.enc.devops
-
-# DevOps 验证
-$ devassets verify legita --manifest=legita-production.manifest.enc.devops
-→ ✅ 他的 .env 符合清单
-→ 🟡 3 个变量还没配置
-
-# 后续同步：Git 中 commit 签名版本
-$ git add legita-production.manifest
-→ 任何人可以验证当前状态，自动 diff 变化
-```
-
-## 项目结构
+## Local Storage
 
 ```
-devassets/
-├── src/
-│   ├── cli.ts                  # 命令行入口
-│   ├── commands/               # 各命令实现
-│   │   ├── scan.ts
-│   │   ├── check.ts
-│   │   ├── export.ts
-│   │   ├── verify.ts
-│   │   ├── rotate.ts
-│   │   ├── audit.ts
-│   │   └── ui.ts
-│   ├── core/                   # 核心逻辑
-│   │   ├── scanner.ts          # 资产扫描
-│   │   ├── validator.ts        # 资产验证
-│   │   ├── exporter.ts         # 清单导出
-│   │   └── signer.ts           # 签名和加密
-│   ├── integrations/           # 第三方集成
-│   │   ├── paddle.ts           # Paddle API
-│   │   ├── stripe.ts           # Stripe API（预留）
-│   │   ├── apple-iap.ts        # Apple IAP（预留）
-│   │   └── google-play.ts      # Google Play（预留）
-│   ├── db/                     # 数据存储
-│   │   ├── schema.ts           # Drizzle schema
-│   │   └── index.ts            # 数据库连接
-│   └── skills/                 # Claude Code Skills
-│       ├── check.ts
-│       ├── export.ts
-│       ├── health.ts
-│       ├── verify.ts
-│       ├── rotate.ts
-│       └── audit.ts
-│
-├── ui/                         # Dashboard 前端
-│   ├── src/
-│   │   ├── pages/
-│   │   ├── components/
-│   │   └── hooks/
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── package.json
-├── tsconfig.json
-└── README.md
+~/.devassets/
+  devassets.db        Projects, assets, payment platforms, audit logs
+  signature.key       32-byte HMAC signing key (chmod 600, auto-generated)
+  permissions.yml     RBAC config (default: owner can do everything)
 ```
 
-## 数据安全
-
-### 核心原则
-- ✅ **不存明文 secret**：值永远在本地 `.env` 或外部 vault（Keychain / 1Password）
-- ✅ **签名所有导出**：HMAC-SHA256 防篡改
-- ✅ **可选加密**：对称加密（AES-256）或非对称加密（RSA）
-- ✅ **完整审计日志**：谁什么时候导出/轮换了什么
-
-### 加密策略
-```
-导出时自动判定：
-
-development 环境？
-  → 签名版本即可（开发机本地用）
-
-production 环境？
-  → 提示需要加密
-
-指定了接收者？
-  → 用接收者的公钥加密（对方能解密）
-
-没指定接收者？
-  → 用对称加密（需要分享密钥）
-```
-
-## 支持的支付平台
-
-### 现在
-- **Paddle**: 完整支持
-  - API key 验证和年龄追踪
-  - Webhook 注册验证
-  - Signature secret 轮换
-
-### 未来预留
-- **Stripe**: 接口已预留
-- **Apple IAP**: iOS 应用支持
-- **Google Play**: Android 应用支持
-
-## 配置文件
-
-### `.devassets/config.yml`
-```yaml
-projects:
-  - name: legita
-    path: ~/projects/legita
-    type: saas
-    environments:
-      - development
-      - staging
-      - production
-    payment_platforms:
-      - paddle
-      - stripe
-    watch_files:
-      - .env
-      - .env.local
-      - .env.production
-
-encryption:
-  method: "aes-256-gcm"           # 对称加密方法
-  signature_key_location: ~/.devassets/signature.key
-```
-
-### `.devassets/permissions.yml`（未来团队支持）
-```yaml
-project: legita
-members:
-  - name: "Ryan"
-    role: "owner"
-    can_see: ["*"]
-    can_export: ["*"]
-    can_rotate: ["*"]
-  
-  - name: "DevOps"
-    role: "devops"
-    can_see: ["api_keys", "webhooks", "payment_platforms"]
-    can_rotate: ["api_keys", "webhook_secrets"]
-```
-
-## API 文档
-
-详见 [SKILLS.md](./SKILLS.md) 了解所有 Skills 的完整定义。
-
-## 贡献
-
-欢迎提交 Issue 和 PR！
+---
 
 ## License
 
 MIT
-
----
-
-## 快速链接
-
-- [完整 PRD](./DevAssets_PRD.md)
-- [Skills API 文档](./SKILLS.md)
-- [开发指南](./DEVELOPMENT.md)
-- [FAQ](./FAQ.md)
