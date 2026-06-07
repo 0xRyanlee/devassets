@@ -10,6 +10,7 @@ import { auditCommand } from './commands/audit.js';
 import { uiCommand } from './commands/ui.js';
 import { serveCommand } from './commands/serve.js';
 import { doctorCommand } from './commands/doctor.js';
+import { installSkillsCommand } from './commands/install-skills.js';
 
 const program = new Command();
 
@@ -95,5 +96,12 @@ program
   .description('Global health report across all registered projects')
   .option('--json', 'Output JSON')
   .action(doctorCommand);
+
+program
+  .command('install-skills')
+  .description('Install devassets Claude Code slash commands to ~/.claude/commands/')
+  .option('--force', 'Overwrite already-installed skills')
+  .option('--list', 'List available skills and their install status')
+  .action(installSkillsCommand);
 
 export { program };

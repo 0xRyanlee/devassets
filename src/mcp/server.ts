@@ -221,6 +221,96 @@ export async function startMcpServer() {
     }
   );
 
+  server.tool(
+    'devassets_ci_snippet',
+    'Generate a GitHub Actions workflow YAML snippet to integrate devassets into a project\'s CI pipeline. The workflow gates deployments: CI fails if asset risks are detected.',
+    {
+      project: z.string().describe('Project ID to generate CI snippet for'),
+      branch: z.string().optional().describe('Branch to run checks on (default: main)'),
+      environment: z.string().optional().describe('Environment to check (default: production)'),
+    },
+    async ({ project: projectId, branch = 'main', environment = 'production' }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+
+      const snippet = generateCiSnippet(projectId, branch, environment);
+      const installHint = [
+        `# How to use devassets CI for "${project.name}"`,
+        '',
+        '## Option A — Reusable workflow (recommended)',
+        'Create .github/workflows/devassets.yml in your target repo:',
+        '',
+        snippet.reusable,
+        '',
+        '## Option B — Standalone workflow (no devassets repo dependency)',
+        '',
+        snippet.standalone,
+        '',
+        '## Notes',
+        '- Requires GitHub token with workflow scope to push: gh auth refresh -h github.com -s workflow',
+        '- --fail-on-risk exits 1 when status is warning or critical, blocking the deploy',
+        `- Skipping /devassets-ci skill in Claude Code also automates this setup`,
+      ].join('\n');
+
+      return { content: [{ type: 'text', text: installHint }] };
+    }
+  );
+
+  server.tool(
+    'devassets_skills',
+    'Return available Claude Code skill definitions for devassets. Install these as ~/.claude/commands/<name>.md to enable /devassets-check and /devassets-ci slash commands.',
+    {
+      skill: z.enum(['devassets-check', 'devassets-ci', 'all']).optional().describe('Which skill to return (default: all)'),
+    },
+    async ({ skill = 'all' }) => {
+      const { readSkillContent } = await import('./skills.js');
+      const skills = skill === 'all'
+        ? { 'devassets-check': readSkillContent('devassets-check'), 'devassets-ci': readSkillContent('devassets-ci') }
+        : { [skill]: readSkillContent(skill) };
+      const installPath = `${process.env.HOME}/.claude/commands/`;
+      return { content: [{ type: 'text', text: JSON.stringify({ installPath, skills, installCommand: 'devassets install-skills' }, null, 2) }] };
+    }
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+function generateCiSnippet(projectId: string, branch: string, environment: string) {
+  const reusable = `name: DevAssets Check
+on:
+  push:
+    branches: [${branch}]
+  pull_request:
+    branches: [${branch}]
+
+jobs:
+  asset-check:
+    uses: 0xRyanlee/devassets/.github/workflows/check.yml@main
+    with:
+      project: ${projectId}
+      environment: ${environment}`;
+
+  const standalone = `name: DevAssets Check
+on:
+  push:
+    branches: [${branch}]
+  pull_request:
+    branches: [${branch}]
+
+jobs:
+  asset-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g @ryan910814/devassets
+      - run: devassets init
+      - run: devassets add-project ${projectId} --path=\${{ github.workspace }} --type=saas
+      - run: devassets scan ${projectId}
+      - run: devassets check ${projectId} --env=${environment} --fail-on-risk`;
+
+  return { reusable, standalone };
 }
