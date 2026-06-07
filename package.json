@@ -1,5 +1,5 @@
 {
-  "name": "@ryan910814/devassets",
+  "name": "@hyphen-network/devassets",
   "version": "0.1.0",
   "description": "Developer asset management system for independent developers",
   "type": "module",
@@ -52,6 +52,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sparkie/devassets"
+    "url": "https://github.com/0xRyanlee/devassets"
   }
 }

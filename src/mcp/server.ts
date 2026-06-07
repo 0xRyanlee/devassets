@@ -333,7 +333,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install -g @ryan910814/devassets
+      - run: npm install -g @hyphen-network/devassets
       - run: devassets init
       - run: devassets add-project ${projectId} --path=\${{ github.workspace }} --type=saas
       - run: devassets scan ${projectId}

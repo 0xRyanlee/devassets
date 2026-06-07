@@ -13,7 +13,7 @@ interface InstallOptions {
 
 export function installSkillsCommand(options: InstallOptions) {
   if (!fs.existsSync(SKILLS_DIR)) {
-    console.error(chalk.red('Skills directory not found. Reinstall @ryan910814/devassets.'));
+    console.error(chalk.red('Skills directory not found. Reinstall @hyphen-network/devassets.'));
     process.exit(1);
   }
 

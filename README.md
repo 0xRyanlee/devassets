@@ -4,7 +4,7 @@
 
 Track environment variables, API keys, and payment platform health across all your projects — with signed exports, audit logs, and native AI integration via MCP.
 
-[![npm](https://img.shields.io/npm/v/@ryan910814/devassets)](https://www.npmjs.com/package/@ryan910814/devassets)
+[![npm](https://img.shields.io/npm/v/@hyphen-network/devassets)](https://www.npmjs.com/package/@hyphen-network/devassets)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.5.0-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -42,7 +42,7 @@ DevAssets solves this with a single CLI that scans, checks, exports, and audits 
 ## Installation
 
 ```bash
-npm install -g @ryan910814/devassets
+npm install -g @hyphen-network/devassets
 ```
 
 ---
