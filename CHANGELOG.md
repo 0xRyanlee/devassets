@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.1 — 2026-06-08
+
+### Fixed (found via cross-project dogfooding on mindset)
+
+- **Payment check read the wrong source.** `check` (CLI + MCP) passed `process.env.PADDLE_API_KEY` /
+  `process.env.STRIPE_SECRET_KEY` — the devassets process's own env, almost always empty — so it
+  reported "not configured" regardless of the project's actual `.env`. Now reads the value transiently
+  from the project's `.env` (via `readEnvValue`), falling back to `process.env` for CI.
+- Added direct unit tests for `readEnvValue` (quote stripping, empty/missing handling, names-only boundary).
+
+### Known follow-up (deferred for design discussion)
+
+- Token-TYPE awareness: a Paddle client/publishable token checked against the server webhooks API
+  returns 404, currently mislabeled "invalid or expired". Needs project-form / cloud-token modeling.
+
 ## 0.4.0 — 2026-06-08
 
 ### Features — Credential Identity layer
