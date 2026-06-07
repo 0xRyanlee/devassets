@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ChevronLeft, KeyRound, AlertTriangle, Fingerprint, CheckCircle2, XCircle } from 'lucide-react';
 import { fetchProject, fetchProjectAssets } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
 import { RiskAlert } from '../components/RiskAlert';
+import { Card, CardContent } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table';
+import { cn } from '@/lib/utils';
 import type { ProjectDetail as ProjectDetailType, AssetDetail } from '../types';
 
 export default function ProjectDetail() {
@@ -24,122 +31,133 @@ export default function ProjectDetail() {
     fetchProjectAssets(id, env || undefined).then(setAssets);
   }, [id, env]);
 
-  if (loading) return <div className="text-gray-500 text-sm">Loading...</div>;
+  if (loading) return <div className="text-muted-foreground text-sm">Loading…</div>;
   if (!project) return <div className="text-red-400 text-sm">Project not found</div>;
 
   const { checkResult } = project;
+  const identities = project.identities ?? [];
   const envOptions = ['', 'development', 'staging', 'production'];
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <Link to="/" className="hover:text-white">Dashboard</Link>
-        <span>/</span>
-        <span className="text-white">{project.name}</span>
-      </div>
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+      <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
+        <ChevronLeft className="h-4 w-4" /> Dashboard
+      </Link>
 
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">{project.name}</h1>
-          <p className="text-xs text-gray-500 font-mono mt-1">{project.path}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
+          <p className="text-xs text-muted-foreground font-mono mt-1">{project.path}</p>
         </div>
         <StatusBadge status={project.status} />
       </div>
 
       <div className="grid grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Total', value: checkResult.assets.total },
+          { label: 'Total', value: checkResult.assets.total, color: 'text-foreground' },
           { label: 'Configured', value: checkResult.assets.configured, color: 'text-green-400' },
           { label: 'Missing', value: checkResult.assets.missing, color: 'text-red-400' },
-          { label: 'Errors', value: checkResult.assets.errors, color: 'text-orange-400' },
+          { label: 'Errors', value: checkResult.assets.errors, color: 'text-amber-400' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-gray-900 border border-gray-800 rounded p-3 text-center">
-            <p className={`text-2xl font-bold ${color ?? 'text-white'}`}>{value}</p>
-            <p className="text-xs text-gray-500 mt-1">{label}</p>
-          </div>
+          <Card key={label}>
+            <CardContent className="p-4 text-center">
+              <p className={cn('text-2xl font-bold tabular-nums', color)}>{value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{label}</p>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {checkResult.risks.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-400 mb-2">Risks</h2>
-          <div className="space-y-2">
-            {checkResult.risks.map((r, i) => <RiskAlert key={i} risk={r} />)}
-          </div>
-        </div>
-      )}
+      <Tabs defaultValue="assets">
+        <TabsList>
+          <TabsTrigger value="assets"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Assets</TabsTrigger>
+          <TabsTrigger value="identities"><Fingerprint className="h-3.5 w-3.5 mr-1.5" />Identities {identities.length > 0 && `(${identities.length})`}</TabsTrigger>
+          <TabsTrigger value="risks"><AlertTriangle className="h-3.5 w-3.5 mr-1.5" />Risks {checkResult.risks.length > 0 && `(${checkResult.risks.length})`}</TabsTrigger>
+        </TabsList>
 
-      {project.identities && project.identities.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-400 mb-2">Credential Identities</h2>
-          <div className="space-y-2">
-            {project.identities.map(id => (
-              <div
-                key={id.keyName}
-                className={`bg-gray-900 border rounded p-3 ${id.mismatch ? 'border-red-700' : id.valid ? 'border-gray-800' : 'border-orange-800'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-white">{id.keyName}</span>
-                  <span className="text-xs text-gray-500">{id.provider}</span>
-                </div>
-                {id.valid ? (
-                  <div className="mt-1 text-xs text-gray-400 space-y-0.5">
-                    {id.account && <div>account: <span className="text-gray-300">{id.account}</span></div>}
-                    {id.workspace && <div>workspace: <span className="text-gray-300">{id.workspace}</span></div>}
-                    {id.projects && id.projects.length > 0 && <div>projects: <span className="text-gray-300">{id.projects.join(', ')}</span></div>}
-                    {id.mismatch && (
-                      <div className="text-red-400 mt-1">
-                        ⚠ MISMATCH — expected account={id.expectedAccount ?? '—'} workspace={id.expectedWorkspace ?? '—'}
+        <TabsContent value="assets">
+          <div className="flex justify-end mb-2">
+            <select
+              value={env}
+              onChange={e => setEnv(e.target.value)}
+              className="bg-secondary border border-border text-sm rounded-md px-2 py-1 text-foreground"
+            >
+              {envOptions.map(o => <option key={o} value={o}>{o || 'All environments'}</option>)}
+            </select>
+          </div>
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Environment</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {assets.map(a => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-mono text-xs">{a.name}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{a.location}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{a.environment ?? '—'}</TableCell>
+                    <TableCell><StatusBadge status={a.status} size="sm" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {assets.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">No assets. Run: devassets scan {id}</p>}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="identities">
+          {identities.length === 0 ? (
+            <Card className="py-10 text-center text-muted-foreground text-sm">
+              No provider credentials resolved. Run: <span className="font-mono">devassets identity {id}</span>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {identities.map(idn => (
+                <Card key={idn.keyName} className={cn(idn.mismatch && 'border-red-500/40', !idn.valid && !idn.mismatch && 'border-amber-500/40')}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {idn.valid ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <XCircle className="h-4 w-4 text-amber-400" />}
+                        <span className="font-mono text-sm">{idn.keyName}</span>
                       </div>
+                      <Badge variant="muted">{idn.provider}</Badge>
+                    </div>
+                    {idn.valid ? (
+                      <div className="mt-2 grid gap-1 text-xs text-muted-foreground pl-6">
+                        {idn.account && <div>account: <span className="text-foreground">{idn.account}</span></div>}
+                        {idn.workspace && <div>workspace: <span className="text-foreground">{idn.workspace}</span></div>}
+                        {idn.projects && idn.projects.length > 0 && <div>projects: <span className="text-foreground">{idn.projects.join(', ')}</span></div>}
+                        {idn.mismatch && (
+                          <div className="text-red-400 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" /> MISMATCH — expected account={idn.expectedAccount ?? '—'} workspace={idn.expectedWorkspace ?? '—'}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 pl-6 text-xs text-amber-400">{idn.error ?? 'invalid'}</p>
                     )}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-xs text-orange-400">{id.error ?? 'invalid'}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-400">Assets</h2>
-          <select
-            value={env}
-            onChange={e => setEnv(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-sm rounded px-2 py-1 text-gray-300"
-          >
-            {envOptions.map(o => <option key={o} value={o}>{o || 'All environments'}</option>)}
-          </select>
-        </div>
-
-        <div className="bg-gray-900 border border-gray-800 rounded overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-gray-500 text-xs">
-                <th className="text-left px-4 py-2">Name</th>
-                <th className="text-left px-4 py-2">Location</th>
-                <th className="text-left px-4 py-2">Environment</th>
-                <th className="text-left px-4 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map(a => (
-                <tr key={a.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                  <td className="px-4 py-2 font-mono text-xs text-white">{a.name}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-gray-400">{a.location}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{a.environment ?? '—'}</td>
-                  <td className="px-4 py-2"><StatusBadge status={a.status} size="sm" /></td>
-                </tr>
+                  </CardContent>
+                </Card>
               ))}
-            </tbody>
-          </table>
-          {assets.length === 0 && (
-            <p className="text-center py-8 text-gray-500 text-sm">No assets. Run: devassets scan {id}</p>
+            </div>
           )}
-        </div>
-      </div>
-    </div>
+        </TabsContent>
+
+        <TabsContent value="risks">
+          {checkResult.risks.length === 0 ? (
+            <Card className="py-10 text-center text-muted-foreground text-sm">No risks detected.</Card>
+          ) : (
+            <div className="space-y-2">
+              {checkResult.risks.map((r, i) => <RiskAlert key={i} risk={r} />)}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </motion.div>
   );
 }
