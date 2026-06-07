@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import { fetchAllAudit } from '../api';
+import { Card } from '../components/ui/card';
+import { cn } from '@/lib/utils';
 import type { AuditEntry } from '../types';
 
 const actionColors: Record<string, string> = {
-  scan: 'text-blue-400',
-  check: 'text-purple-400',
-  export: 'text-green-400',
-  verify: 'text-teal-400',
-  rotate: 'text-orange-400',
-  audit: 'text-gray-400',
+  scan: 'bg-blue-500/15 text-blue-400',
+  check: 'bg-purple-500/15 text-purple-400',
+  export: 'bg-green-500/15 text-green-400',
+  verify: 'bg-teal-500/15 text-teal-400',
+  rotate: 'bg-orange-500/15 text-orange-400',
+  identity: 'bg-cyan-500/15 text-cyan-400',
+  audit: 'bg-muted text-muted-foreground',
 };
 
 export default function AuditLog() {
@@ -23,54 +27,57 @@ export default function AuditLog() {
   const filtered = filter ? logs.filter(l => l.action === filter || l.projectId === filter) : logs;
   const actions = [...new Set(logs.map(l => l.action))];
 
-  if (loading) return <div className="text-gray-500 text-sm">Loading...</div>;
+  if (loading) return <div className="text-muted-foreground text-sm">Loading…</div>;
 
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">Audit Log</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
+          <p className="text-sm text-muted-foreground mt-1">Every scan, check, export, and rotation.</p>
+        </div>
         <select
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-sm rounded px-2 py-1 text-gray-300"
+          className="bg-secondary border border-border text-sm rounded-md px-2 py-1.5 text-foreground"
         >
           <option value="">All actions</option>
           {actions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded overflow-hidden">
+      <Card className="overflow-hidden">
         {filtered.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 text-sm">No audit entries found.</p>
+          <p className="text-center py-10 text-muted-foreground text-sm">No audit entries found.</p>
         ) : (
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-border/50">
             {filtered.map(log => (
-              <div key={log.id} className="px-4 py-3 flex items-start gap-4">
-                <span className={`text-xs font-mono font-bold w-16 shrink-0 ${actionColors[log.action] ?? 'text-gray-400'}`}>
+              <div key={log.id} className="px-4 py-3 flex items-start gap-4 hover:bg-muted/30 transition-colors">
+                <span className={cn('text-[10px] font-mono font-semibold uppercase tracking-wide rounded px-2 py-1 w-20 text-center shrink-0', actionColors[log.action] ?? 'bg-muted text-muted-foreground')}>
                   {log.action}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-white">{log.projectId}</span>
-                    <span className={`text-xs ${log.result === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                      {log.result}
-                    </span>
-                    <span className="text-xs text-gray-500">{log.user}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{log.projectId}</span>
+                    {log.result === 'success'
+                      ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                      : <XCircle className="h-3.5 w-3.5 text-red-400" />}
+                    <span className="text-xs text-muted-foreground">{log.user}</span>
                   </div>
                   {log.details && Object.keys(log.details).length > 0 && (
-                    <p className="text-xs text-gray-600 font-mono mt-1 truncate">
+                    <p className="text-xs text-muted-foreground/70 font-mono mt-1 truncate">
                       {Object.entries(log.details).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')}
                     </p>
                   )}
                 </div>
-                <span className="text-xs text-gray-600 shrink-0">
+                <span className="text-xs text-muted-foreground/70 shrink-0">
                   {new Date(log.timestamp).toLocaleString()}
                 </span>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

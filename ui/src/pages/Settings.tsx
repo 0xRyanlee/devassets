@@ -1,54 +1,76 @@
-export default function Settings() {
-  return (
-    <div className="max-w-2xl">
-      <h1 className="text-xl font-bold mb-6">Settings</h1>
+import { Bot, GitBranch, HardDrive } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
-      <div className="space-y-4">
-        <section className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="font-semibold mb-3">MCP Server (Claude Code Integration)</h2>
-          <p className="text-sm text-gray-400 mb-3">
-            Add to your <code className="text-yellow-400">.claude/settings.json</code> to enable AI-powered asset management:
-          </p>
-          <pre className="bg-gray-950 border border-gray-700 rounded p-3 text-xs text-green-300 overflow-x-auto">
-{`{
+const mcpConfig = `{
   "mcpServers": {
     "devassets": {
       "command": "devassets",
       "args": ["serve"]
     }
   }
-}`}
-          </pre>
-        </section>
+}`;
 
-        <section className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="font-semibold mb-3">CI/CD Integration</h2>
-          <p className="text-sm text-gray-400 mb-3">
-            Add to your GitHub Actions or CI pipeline to gate deployments:
-          </p>
-          <pre className="bg-gray-950 border border-gray-700 rounded p-3 text-xs text-green-300 overflow-x-auto">
-{`- name: Check assets
-  run: devassets check $PROJECT --env=production --fail-on-risk`}
-          </pre>
-        </section>
+const ciConfig = `- name: Check assets
+  run: devassets check $PROJECT --env=production --fail-on-risk`;
 
-        <section className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="font-semibold mb-3">Storage</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-gray-500 w-28">Database</span>
-              <code className="text-gray-300 font-mono text-xs">~/.devassets/devassets.db</code>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-gray-500 w-28">Signing key</span>
-              <code className="text-gray-300 font-mono text-xs">~/.devassets/signature.key</code>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-gray-500 w-28">Permissions</span>
-              <code className="text-gray-300 font-mono text-xs">~/.devassets/permissions.yml</code>
-            </div>
-          </div>
-        </section>
+function CodeBlock({ children }: { children: string }) {
+  return (
+    <pre className="bg-background/60 border border-border rounded-lg p-3 text-xs text-green-300 overflow-x-auto font-mono">
+      {children}
+    </pre>
+  );
+}
+
+const storage = [
+  { label: 'Database', path: '~/.devassets/devassets.db' },
+  { label: 'Signing key', path: '~/.devassets/signature.key' },
+  { label: 'Permissions', path: '~/.devassets/permissions.yml' },
+];
+
+export default function Settings() {
+  return (
+    <div className="max-w-2xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground mt-1">Integration snippets and local storage.</p>
+      </div>
+
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><Bot className="h-4 w-4 text-primary" />MCP Server (Claude Code / Cursor)</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-sm text-muted-foreground mb-3">
+              Add to your <code className="text-amber-400 font-mono">.claude/settings.json</code> to enable AI-powered asset management:
+            </p>
+            <CodeBlock>{mcpConfig}</CodeBlock>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><GitBranch className="h-4 w-4 text-primary" />CI/CD Integration</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-sm text-muted-foreground mb-3">Gate deployments in GitHub Actions or any CI pipeline:</p>
+            <CodeBlock>{ciConfig}</CodeBlock>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><HardDrive className="h-4 w-4 text-primary" />Local Storage</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2 text-sm">
+            {storage.map(s => (
+              <div key={s.label} className="flex items-center gap-3">
+                <span className="text-muted-foreground w-28 shrink-0">{s.label}</span>
+                <code className="text-foreground/80 font-mono text-xs">{s.path}</code>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
