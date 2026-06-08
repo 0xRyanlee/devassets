@@ -42,6 +42,7 @@ a single accent, subtle gradients + glassmorphism, and **motion that shows the p
 |---|---|---|---|
 | 1 | **Hero** | hook + install | headline, one-liner, `npm i` copy block, GitHub + Docs buttons, animated terminal |
 | 2 | **The Problem** | resonate | 4 pain quotes (mono, as if from the dev's head) |
+| 2.5 | **Who it's for** | self-identify | 5 persona cards: situation → pain → how devassets solves it (honest, not testimonials) |
 | 3 | **What it does** | features | 6-card grid with icons |
 | 4 | **Live demo** | show product | animated `devassets identity` + `doctor` output / dashboard screenshot |
 | 5 | **With / Without** | value contrast | 2-column comparison table |
@@ -69,6 +70,14 @@ a single accent, subtle gradients + glassmorphism, and **motion that shows the p
 - "Is this `VERCEL_TOKEN` my personal account or the company team?"
 - "This `SUPABASE_URL` — right project, or did I paste staging into prod?"
 - "Which npm account / GCloud project does this service account belong to?"
+
+**Who it's for** (persona cards — situation → pain → solution; lets visitors self-identify. Honest framing: these are use cases, not quotes from named users.)
+
+1. **The multi-project solo dev** — "I run 12 side projects." → *Can't remember which `VERCEL_TOKEN`/Supabase belongs to which account.* → `doctor` cross-project overview + `identity` resolves every token's account/workspace.
+2. **The vibe-coder (AI-driven)** — "I build with Claude Code / Cursor." → *The agent can't see my credential state, so it guesses.* → MCP server gives the agent 12 tools to check/scan/resolve directly.
+3. **The Friday-deploy founder** — "Shipping to prod, again." → *A forgotten secret 500s production.* → `check --fail-on-risk` gates the deploy and names the missing secret.
+4. **The repo-reviver** — "Reopening a 6-month-old project." → *`.env` archaeology to figure out what it needs.* → `scan` + `identity` map every key and account in seconds.
+5. **The security-minded dev** — "I don't want a leaked/over-privileged token." → *A broad PAT sitting in the wrong project's `.env`.* → classification + `identity` surface it (this is a real find from the author's own dogfooding).
 
 **Features** (6)
 1. **Inventory, not exposure** — scans `.env*` for key *names* only, across every project.
