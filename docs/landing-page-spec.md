@@ -16,11 +16,18 @@
 
 ---
 
-## 2. Visual system — "Linear style"
+## 2. Visual system — linear.app website aesthetic
 
-Linear's aesthetic (per research): near-black canvas, **Inter** type with tight tracking, strong
-typographic hierarchy (one bold centered headline + one CTA per viewport), restrained palette with
-a single accent, subtle gradients + glassmorphism, and **motion that shows the product in action**.
+> Clarified: emulate **linear.app's actual website design**, not the existing Hyphen page style.
+
+linear.app signature treatment to replicate:
+- **Near-black canvas** with a **subtle multi-stop gradient mesh** glow (blue/violet, very low opacity, blurred) behind hero and section transitions — the defining Linear background.
+- **Big, tight typography**: oversized bold headline (`clamp(44px,7vw,76px)`), tracking `-0.03em`, generous line-height control; lots of negative space / vertical rhythm.
+- **One bold headline + one primary action per viewport**; everything else recedes.
+- **Glassmorphism**: cards are semi-transparent (`rgba(surface, 0.6)`) with `backdrop-filter: blur`, hairline borders, soft inner glow on hover.
+- **Product mock with glow + perspective**: the terminal/dashboard floats with a large soft shadow and a faint accent halo (Linear's product-shot treatment).
+- **Restrained, near-monochrome** with a single accent (devassets blue `#3b82f6`); gradients do the color work, not flat fills.
+- **Refined micro-motion**: subtle fade-up on scroll, gradient drift, hover lifts — nothing loud.
 
 - **Canvas**: reuse Hyphen `--canvas #06070a`; devassets accent **`#3b82f6`** (blue) via layout override.
 - **Type**: geist sans (site default) for headings; geist mono for code/labels/keys.
