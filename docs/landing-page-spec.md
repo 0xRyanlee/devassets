@@ -46,7 +46,7 @@ a single accent, subtle gradients + glassmorphism, and **motion that shows the p
 | 4 | **Live demo** | show product | animated `devassets identity` + `doctor` output / dashboard screenshot |
 | 5 | **With / Without** | value contrast | 2-column comparison table |
 | 6 | **vs. secret managers** | category clarity | comparison table (complementary, not competing) |
-| 7 | **Proof** | social proof | dogfood stats with count-up |
+| 7 | **Proof** | social proof (HONEST only) | dogfood stats (count-up) + real engineering signals; NO fabricated testimonials |
 | 8 | **For AI agents** | AEO + agent onboarding | MCP snippet + "ask your agent" examples |
 | 9 | **FAQ** | AEO + objections | FAQPage-schema Q&A accordion |
 | 10 | **Get started** | conversion | install steps, MCP config, links |
@@ -78,8 +78,14 @@ a single accent, subtle gradients + glassmorphism, and **motion that shows the p
 5. **Knows what's a secret** — public vs secret vs identifier; cloud/CI/runtime keys = "managed", never false-flagged.
 6. **AI-native** — MCP server; your agent checks credentials directly.
 
-**Proof**
+**Proof** (honest social proof — NO fake testimonials; see §11)
 > Run on 10 of my own production projects: surfaced **33 unset secrets** and an **over-privileged Supabase token spanning 4 projects** — caught before any of it reached production.
+
+Real trust signals (all true, link each to evidence):
+- **92 tests · MIT · fully open source** — auditable, no telemetry.
+- **Shipped after an adversarial security audit** — 13 findings fixed before release (link the commit).
+- **Secret values never leave your machine** — names + metadata only.
+- Author's dogfooding note as a quote (first-person, true), not a fabricated user.
 
 ---
 
@@ -159,7 +165,13 @@ reference, FAQ schema, llms.txt, and statistics/quotes increase AI citation.
 
 **Tax concern summary**: with any MoR (GitHub Sponsors handles its own, Polar, Paddle, Lemon Squeezy), **sales tax/VAT is not your problem** — the platform handles it. You only declare the received amount as income. For a Taiwan-based author, that's personal/business income tax on payouts; no need to register for foreign VAT. A literal "donation" has different (sometimes worse) tax/legal treatment than "payment for a digital product/sponsorship", so framing it as **"buy me a coffee / supporter"** (a product) via GitHub Sponsors or Polar is cleaner than a "donation".
 
-**Page treatment**: a tasteful "Support" block — `★ Star on GitHub` (free) as primary, `☕ Buy me a coffee — $1` (GitHub Sponsors / Ko-fi link) as secondary. Don't build a Paddle product for this.
+**DECIDED order (trust-first — stars before money):**
+1. **★ Star on GitHub** (primary CTA) — free, builds the social proof that any later donation depends on. A link/button to `github.com/0xRyanlee/devassets` (cannot auto-star; it takes the user to GitHub where they click Star).
+2. **GitHub Sponsors** (secondary, soft) — for those who want to support.
+3. Paid tip (Ko-fi / Polar) — **deferred** until there's traction; not worth building now.
+4. Paddle — not used for tips (fees + ToS, see above). ("Paddle Pro" isn't a tipping product; Paddle is a MoR for selling software — only relevant if devassets later sells a paid tier.)
+
+**Page treatment**: a "Support" block led by `★ Star on GitHub`, with a quiet "Sponsor" link. No $ amount shown yet.
 
 ---
 
@@ -205,9 +217,17 @@ reference, FAQ schema, llms.txt, and statistics/quotes increase AI citation.
 
 ---
 
-## 10. Open decisions for the user
+## 10. Decisions (resolved)
 
-1. **Donate mechanism**: GitHub Sponsors (recommended) vs Ko-fi vs Polar.sh vs (not) Paddle?
-2. **Star count live** via GitHub API, or static?
-3. **OG/demo image**: animated terminal vs dashboard screenshot as the hero visual?
-4. **Subdomain vs path**: ship at `/devassets` first (works immediately) and add the subdomain after?
+1. **Support**: trust-first — `★ Star on GitHub` primary, Sponsors secondary, paid tips deferred. No Paddle for tips.
+2. **Star count**: NOT shown live (too low to help yet). Instead: honest trust signals (tests/MIT/audit) — see §11.
+3. **Hero visual**: **animated terminal** (`devassets doctor` / `identity` typing → output), Linear-style "product in action"; dashboard screenshot used lower in the demo section.
+4. **URL**: ship the subdomain **devassets.hyphen-network.com** (path `/devassets` works immediately; add the domain rewrite on Vercel). The "Star" button is a plain link to the GitHub repo — clicking it sends the visitor to GitHub to star (no auto-star possible without their GitHub auth).
+
+## 11. Integrity guardrail (no fake testimonials)
+
+Fabricated user comments are out — deceptive, illegal in many jurisdictions (FTC/EU/UK), and
+uniquely fatal for a *trust/security* product if discovered. Replace with honest, stronger proof:
+author dogfooding (true), engineering signals (92 tests, MIT, open source, no telemetry), the
+adversarial security audit (true, link commits), and a placeholder testimonials structure to fill
+with **real** quotes once early users exist. This is a hard line.
