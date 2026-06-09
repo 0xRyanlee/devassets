@@ -15,8 +15,10 @@ export function initCommand() {
     logger.raw(`  Config dir:  ${DEVASSETS_DIR}`);
     logger.raw('');
     logger.raw('Next steps:');
-    logger.raw('  devassets add-project <name> --path=<path>');
-    logger.raw('  devassets scan <project>');
+    logger.raw('  1. devassets add-project <name> --path=<path>');
+    logger.raw('  2. devassets scan <project>');
+    logger.raw('  3. devassets check <project>');
+    logger.raw('  4. devassets identity <project>   # resolve provider accounts');
   } catch (err) {
     logger.error(`Initialization failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);

@@ -70,5 +70,5 @@ devassets/
 2. **Transient value reads** — `identity`/`check` read a value in-memory to call a provider, then discard it (the single scoped exception); never written to disk or logs.
 3. **All exports signed** — HMAC-SHA256 with local key.
 4. **Encryption opt-in** — AES-256-GCM, password never stored.
-5. **No network by default** — provider API calls only when `check`/`identity` are explicitly run.
+5. **No network by default** — provider API calls only when `check`/`identity` are explicitly run. MCP tool invocations of `devassets_check` are treated as explicit invocations; agent-driven calls are equivalent to user-driven CLI calls under this invariant.
 6. **Dashboard localhost-only** — 127.0.0.1 bind, CORS restricted.

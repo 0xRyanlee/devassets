@@ -61,6 +61,9 @@ export function exportCommand(projectId: string, options: ExportOptions) {
 
     sp.succeed(`Export complete: ${project.name}`);
     console.log(formatExportHuman(result));
+    if (result.outputPath) {
+      logger.raw(`  Next: devassets verify ${projectId} --manifest=${result.outputPath}`);
+    }
   } catch (err) {
     sp.fail(`Export failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
