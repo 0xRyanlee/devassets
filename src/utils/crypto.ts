@@ -5,6 +5,7 @@ import {
   randomBytes,
   scryptSync,
   timingSafeEqual,
+  hkdfSync,
 } from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -76,6 +77,36 @@ export function decryptAES(encrypted: string, password: string): string {
   decipher.setAuthTag(authTag);
 
   let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
+// Vault key derived from signature key via HKDF — never used for HMAC signing
+let _vaultKey: Buffer | null = null;
+
+export function getVaultKey(): Buffer {
+  if (!_vaultKey) {
+    const sigKey = getSignatureKey();
+    const derived = hkdfSync('sha256', sigKey, Buffer.from('devassets-vault-v1'), '', 32);
+    _vaultKey = Buffer.from(derived);
+  }
+  return _vaultKey;
+}
+
+export function encryptVault(plaintext: string): { ciphertext: string; iv: string; authTag: string } {
+  const key = getVaultKey();
+  const iv = randomBytes(12); // 96-bit IV for AES-GCM
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
+  ciphertext += cipher.final('hex');
+  return { ciphertext, iv: iv.toString('hex'), authTag: cipher.getAuthTag().toString('hex') };
+}
+
+export function decryptVault(ciphertext: string, iv: string, authTag: string): string {
+  const key = getVaultKey();
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
+  decipher.setAuthTag(Buffer.from(authTag, 'hex'));
+  let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
 }

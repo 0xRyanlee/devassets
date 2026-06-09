@@ -233,6 +233,52 @@ describe('CLI: identity', () => {
   });
 });
 
+describe('CLI: vault (set / get / list / unset)', () => {
+  it('set stores a secret and get retrieves it', () => {
+    const { status: s1 } = cli('set myproject DB_PASSWORD s3cr3t --env=staging');
+    expect(s1).toBe(0);
+    const { stdout, status: s2 } = cli('get myproject DB_PASSWORD --env=staging');
+    expect(s2).toBe(0);
+    expect(stdout.trim()).toBe('s3cr3t');
+  });
+
+  it('list shows key metadata without values', () => {
+    cli('set myproject API_KEY abc123 --env=staging --provider=stripe');
+    const { stdout, status } = cli('list myproject --env=staging --json');
+    expect(status).toBe(0);
+    const items = JSON.parse(stdout);
+    const key = items.find((i: { key: string }) => i.key === 'API_KEY');
+    expect(key).toBeDefined();
+    expect(key.provider).toBe('stripe');
+    expect(key).not.toHaveProperty('value');
+    expect(key).not.toHaveProperty('encrypted_value');
+  });
+
+  it('set overwrites existing secret', () => {
+    cli('set myproject DB_PASSWORD updated --env=staging');
+    const { stdout } = cli('get myproject DB_PASSWORD --env=staging');
+    expect(stdout.trim()).toBe('updated');
+  });
+
+  it('get exits 1 for missing key', () => {
+    const { status } = cli('get myproject NONEXISTENT_KEY --env=staging');
+    expect(status).toBe(1);
+  });
+
+  it('unset deletes the secret', () => {
+    cli('set myproject TEMP_KEY tempval --env=staging');
+    const { status: s1 } = cli('unset myproject TEMP_KEY --env=staging --yes');
+    expect(s1).toBe(0);
+    const { status: s2 } = cli('get myproject TEMP_KEY --env=staging');
+    expect(s2).toBe(1);
+  });
+
+  it('unset exits 1 for missing key', () => {
+    const { status } = cli('unset myproject NONEXISTENT --env=staging --yes');
+    expect(status).toBe(1);
+  });
+});
+
 describe('CLI: error handling', () => {
   it('exits 1 for unknown project', () => {
     const { status } = cli('scan nonexistent');
