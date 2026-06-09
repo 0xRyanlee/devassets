@@ -1,83 +1,12 @@
 # DevAssets
 
-**The credential command center for independent builders.**
+**The local-first secrets manager and credential command center for independent developers.**
 
-Know exactly which API keys, env vars, and access tokens each of your projects uses — which account and workspace every token belongs to, what's missing before you deploy, and never again lose track or push with the wrong credentials. CLI + web dashboard + native AI integration via MCP. Your secret values never leave your machine.
+Store your API keys and env vars encrypted on your machine. Manage them across 10+ projects from one CLI. Know exactly which account every token belongs to, what's missing before you deploy, and inject secrets directly into commands — no cloud, no account, no telemetry.
 
 [![npm](https://img.shields.io/npm/v/@hyphen-network/devassets)](https://www.npmjs.com/package/@hyphen-network/devassets)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.5.0-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
----
-
-## The Problem
-
-You run 10+ projects. Each has its own `.env`, its own Vercel project, Supabase instance, Neon database, Google Cloud service account, LLM provider keys, and payment secrets. The pain isn't one big failure — it's the constant low-grade friction:
-
-- *"Which `.env.example` key did I forget to actually set before this deploy?"*
-- *"Is this `VERCEL_TOKEN` for my personal account or the company team?"*
-- *"This `SUPABASE_URL` — is it pointing at the right project, or did I paste staging into prod?"*
-- *"Which npm account is this token? Which Google Cloud project does this service account belong to?"*
-
-These cause real incidents: a missing secret 500s production, a token from the wrong workspace silently writes to the wrong database, an expired key fails a deploy at 2am.
-
-DevAssets gives you one place to see all of it — **without ever storing your secret values.**
-
----
-
-## What DevAssets does — and what it does NOT do
-
-### ✅ It does
-
-| Capability | How |
-|---|---|
-| **Inventory** every env var / token across all projects | Scans `.env*` files for key *names* |
-| **Detect missing required keys** before deploy | Compares actual `.env` against `.env.example` declarations |
-| **Resolve token → account / workspace / project** | Calls each provider's identity API at check time (Vercel, Supabase, Neon, npm, Google Cloud) |
-| **Catch wrong-account / workspace-mismatch** | Pin the expected identity once; warns on any future drift |
-| **Verify validity** | Flags expired / revoked / wrong-scope tokens |
-| **Visualize** per-project state | Local web dashboard + CLI reports |
-| **Gate deploys** | `--fail-on-risk` exit code for CI |
-| **Signed, optionally encrypted exports** | HMAC-SHA256 + AES-256-GCM |
-| **AI-native** | MCP server — agents query/manage assets directly |
-
-### ❌ It does NOT do (boundaries)
-
-- **Does not sync to the cloud.** Everything stays in local SQLite at `~/.devassets/`. No account, no telemetry, no third-party service.
-- **Does not rotate keys for you.** `rotate` records intent + gives instructions; you perform the rotation in the provider dashboard.
-- **Does not run in the background.** It's event-driven — runs only when you (or an agent) call it.
-- **Agent access is metadata-only by default.** The MCP server exposes key names, health status, and identity records — not secret values. Values require an explicit `get` or `inject` call.
-
----
-
-## Before / After
-
-| Scenario | Without DevAssets | With DevAssets |
-|---|---|---|
-| Deploy with a required key unset | 500 in production, debug from logs | `check --fail-on-risk` blocks the deploy, names the missing secret |
-| Token from the wrong account | Silent — discovered when data lands in the wrong place | `identity` shows `account: personal@…` vs expected `team: company`; flags ⚠ MISMATCH |
-| "Where is the Supabase project for this app?" | Dig through dashboards, guess the ref | Dashboard shows `workspace: abcd1234`, the exact project ref |
-| Onboarding a 6-month-old project | Open `.env`, cross-check every service by hand | `scan` + `identity` produces the full map in seconds |
-| "Did I rotate that key?" | Search Slack / memory | `audit` shows every rotation with timestamp |
-| Sharing a deploy checklist | Paste secrets in chat (unsafe) | `export --encrypt` — signed, AES-encrypted, names-only |
-
----
-
-## Scenarios
-
-**Friday deploy, paperclip.** You run `devassets check paperclip --env=production`. It reports 4 critical missing secrets (`AUTH_TOKEN_KEY`, `AI_API_KEY`, `ERROR_TRACKING_DSN`, `AUTH_REFRESH_TOKEN_KEY`) declared in `.env.example` but never set — plus 32 optional config keys flagged as low (ignored). You set the 4, deploy clean.
-
-**Multi-account confusion.** You manage personal and company Vercel/Supabase. `devassets identity company-app` shows `VERCEL_TOKEN → account: company-team` and `SUPABASE_URL → workspace: prod-ref`. You `--pin` both. Three weeks later you accidentally paste a personal token; the next `identity` run shows ⚠ MISMATCH before it ever reaches a deploy.
-
-**Agent-driven.** In Claude Code: *"Check all my projects and tell me which ones have credential problems."* The agent calls `devassets_doctor` and `devassets_identity`, comes back with a ranked list.
-
----
-
-## Requirements
-
-- Node.js **22.5+** (uses built-in `node:sqlite`)
-
-## Installation
 
 ```bash
 npm install -g @hyphen-network/devassets
@@ -85,136 +14,43 @@ npm install -g @hyphen-network/devassets
 
 ---
 
-## Quick Start
+> **中文** · **日本語** · **Français** · **Italiano** — [see multilingual intro below](#multilingual)
+
+---
+
+## The Problem
+
+You run multiple projects. Each has its own `.env`, its own Vercel project, Supabase org, Neon database, GCP service account, LLM provider keys, and payment secrets. The friction is constant:
+
+- *"Which `.env.example` key did I forget before this deploy?"*
+- *"Is this `VERCEL_TOKEN` for my personal account or the company team?"*
+- *"This `SUPABASE_URL` — is it staging or prod?"*
+- *"Where did I store the production `DATABASE_URL` for that side project I haven't touched in six months?"*
+- *"Did I rotate that key after the incident, or just mean to?"*
+
+These cause real incidents: a missing secret 500s production, a token from the wrong workspace silently writes to the wrong database, an expired key fails a deploy at 2am.
+
+**DevAssets gives you one encrypted local vault plus a full credential map — for every project, from one CLI.**
+
+---
+
+## What DevAssets Does
+
+### Encrypted Local Vault
+
+Store secret values with AES-256-GCM encryption. Each value gets a unique IV. The vault key is derived from your local signing key via HKDF — no separate password to remember, no key file to manage.
 
 ```bash
-# 1. Initialize (creates ~/.devassets/ database and signing key)
-devassets init
-
-# 2. Register your projects
-devassets add-project paperclip --path=~/projects/paperclip --type=saas
-
-# 3. Scan environment files (records key names + detects missing vs .env.example)
-devassets scan paperclip
-
-# 4. Check deploy-readiness
-devassets check paperclip --env=production
-
-# 5. Resolve which account/workspace each token belongs to
-devassets identity paperclip
-
-# 6. Once verified correct, pin expected identities — future drift will warn
-devassets identity paperclip --pin
-
-# 7. Store secrets in the local encrypted vault
-devassets set paperclip DATABASE_URL                 # prompts, hidden input
-devassets set paperclip STRIPE_SECRET_KEY sk_live_… --provider=stripe
-devassets list paperclip                             # key names + metadata only
-devassets get paperclip DATABASE_URL                 # decrypt to stdout
-
-# 8. Inject into a command run (secrets never written to disk)
-devassets run paperclip -- npm run migrate
-
-# 9. See everything across all projects
-devassets doctor
+devassets set myapp DATABASE_URL          # hidden prompt, no shell history
+devassets set myapp STRIPE_SK sk_live_…  --provider=stripe
+devassets get myapp DATABASE_URL          # decrypt to stdout
+devassets run myapp -- npm run migrate    # inject all secrets into a command
+devassets list myapp                      # key names + metadata, never values
 ```
 
----
+### Credential Identity Resolution
 
-## Commands
-
-| Command | Description |
-|---|---|
-| `devassets init` | Initialize database and signing key |
-| `devassets add-project <name>` | Register a project |
-| `devassets scan <project>` | Scan `.env` files; detect missing keys vs `.env.example` |
-| `devassets check <project>` | Check asset health and risks |
-| `devassets identity <project>` | Resolve token → account/workspace/project; `--pin` to lock expected |
-| `devassets doctor` | Global health report across all projects; `--fix` to re-scan all |
-| `devassets export <project>` | Export a signed (optionally encrypted) manifest |
-| `devassets verify <project>` | Verify a manifest's signature; `--json` for machine-readable output |
-| `devassets rotate <project> <key>` | Record rotation intent + instructions |
-| `devassets audit <project>` | View audit log |
-| `devassets ui` | Start web dashboard at localhost:9090 |
-| `devassets serve` | Start MCP server (stdio) |
-| `devassets install-skills` | Install Claude Code slash commands (`/devassets-check`, `/devassets-ci`) |
-| `devassets portfolio` | Inspect all projects under a root directory and write a traceable portfolio snapshot |
-| **Vault** | |
-| `devassets set <project> <key> [value]` | Encrypt and store a secret value locally |
-| `devassets get <project> <key>` | Decrypt and print a secret value |
-| `devassets list <project>` | List stored key names and metadata (values never shown) |
-| `devassets unset <project> <key>` | Delete a stored secret |
-| `devassets inject <project>` | Load secrets into current shell env; `--print` outputs `export` statements |
-| `devassets run <project> -- <cmd>` | Run a command with secrets injected as env variables |
-
----
-
-## Local Vault
-
-DevAssets includes a local encrypted vault for storing secret values alongside their metadata. Values are encrypted with **AES-256-GCM** using a key derived from your local signature key via HKDF — no separate master password or key file required.
-
-```bash
-# Store a secret (prompts with hidden input if value omitted)
-devassets set myapp DATABASE_URL
-
-# Store with provider hint for display
-devassets set myapp STRIPE_SK sk_live_… --provider=stripe --account=billing@company.com
-
-# List stored keys — values never exposed
-devassets list myapp
-# myapp [local]
-#   DATABASE_URL                     2026-06-10
-#   STRIPE_SK          (stripe)      2026-06-10
-
-# Retrieve a value
-devassets get myapp DATABASE_URL
-
-# Inject all secrets into a subcommand
-devassets run myapp -- node server.js
-
-# Shell eval pattern (export into current shell)
-eval "$(devassets inject myapp --print)"
-```
-
-**Security design:**
-- Each value encrypted with a unique 12-byte random IV — no two ciphertexts are alike
-- Vault key derived via `HKDF-SHA256(sigKey, salt="devassets-vault-v1")` — key never written to disk
-- Agent (MCP) access sees key names and metadata only; getting a value requires an explicit `get` call
-- Cross-project sharing is always explicit — no automatic propagation between projects
-
----
-
-## Portfolio Report
-
-The `portfolio` command is an optional workspace-level report generator. It inspects all sub-projects under a root directory and writes an immutable point-in-time snapshot. It does not affect DevAssets' per-project credential database.
-
-A portfolio snapshot contains: project purpose and stage, Git/GitHub and CI signals, detected stack, DevAssets asset health, evidence files, and a recommended next action.
-
-```bash
-# Scan current directory and write snapshots to ./overview/
-devassets portfolio
-
-# Specify root and output location explicitly
-devassets portfolio --root=/path/to/projects --overview=/path/to/projects/overview
-
-# Output full report as JSON (for piping / dashboards)
-devassets portfolio --json
-```
-
-Run it when you need a new point-in-time portfolio report. It atomically updates `overview/data/current.json` after writing an immutable `overview/data/history/YYYY/MM/DD/<run-id>.json`, a human-readable Markdown log, and the append-only `overview/logs/runs.jsonl` index.
-
-| Option | Default | Purpose |
-|---|---|---|
-| `--root <path>` | current directory | Project collection root to inspect |
-| `--overview <path>` | `<root>/overview` | Output root for snapshots and logs |
-| `--no-github` | — | Skip live GitHub queries; use latest local observation |
-| `--json` | — | Output full report as JSON instead of summary |
-
----
-
-## Credential Identity (the headline feature)
-
-`devassets identity <project>` reads each provider token **transiently**, asks the provider "who does this belong to?", and records only the answer.
+Ask every provider "who does this token belong to?" and pin the answer. Get warned the next time a token drifts to the wrong account or workspace.
 
 ```
 Credential Identities — company-app
@@ -229,58 +65,167 @@ Credential Identities — company-app
       Neon API 401 — token invalid or expired
 ```
 
+### Deploy-Gate Health Checks
+
+Scan `.env` files, compare against `.env.example`, and block deploys when required secrets are missing.
+
+```bash
+devassets check myapp --env=production --fail-on-risk
+# exits 1 if any secrets are missing or mismatched — safe for CI
+```
+
+### Full Audit Trail
+
+Every `get`, `set`, `rotate`, and `inject` is logged with timestamp and key name.
+
+---
+
+## Before / After
+
+| Scenario | Without DevAssets | With DevAssets |
+|---|---|---|
+| Deploy with a required key unset | 500 in production | `check --fail-on-risk` blocks it, names the key |
+| Token from the wrong account | Silent data corruption | `identity` flags ⚠ MISMATCH before deploy |
+| "Where's the production DB URL?" | Search `.env` files across 10 repos | `get myapp DATABASE_URL` |
+| Onboarding a 6-month-old project | Cross-check every service manually | `scan` + `identity` maps it in seconds |
+| "Did I rotate that key?" | Search Slack / memory | `audit` shows every rotation with timestamp |
+| Share deploy checklist | Paste secrets in chat (unsafe) | `export --encrypt` — signed, encrypted, names-only |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Initialize (creates ~/.devassets/ — keep this off cloud sync)
+devassets init
+
+# 2. Register your project
+devassets add-project myapp --path=~/projects/myapp --type=saas
+
+# 3. Scan .env files and detect missing keys vs .env.example
+devassets scan myapp
+
+# 4. Store secrets in the encrypted vault
+devassets set myapp DATABASE_URL          # prompts with hidden input
+devassets set myapp STRIPE_SECRET_KEY sk_live_… --provider=stripe
+
+# 5. Check deploy-readiness
+devassets check myapp --env=production
+
+# 6. Resolve which account/workspace each token belongs to
+devassets identity myapp --pin            # pin as expected baseline
+
+# 7. Inject secrets into a command
+devassets run myapp -- npm run migrate
+
+# 8. See everything across all projects
+devassets doctor
+```
+
+---
+
+## Commands
+
+### Vault — encrypted secret storage
+
+| Command | Description |
+|---|---|
+| `devassets set <project> <key> [value]` | Encrypt and store a secret value (prompts if value omitted) |
+| `devassets get <project> <key>` | Decrypt and print a value; `--raw` skips trailing newline |
+| `devassets list <project>` | List stored key names and metadata — **values never shown** |
+| `devassets unset <project> <key>` | Delete a stored secret |
+| `devassets inject <project>` | Load secrets into shell env; `--print` outputs `export` statements |
+| `devassets run <project> -- <cmd>` | Run a command with secrets injected |
+
+### Credential management
+
+| Command | Description |
+|---|---|
+| `devassets scan <project>` | Scan `.env` files; detect missing keys vs `.env.example` |
+| `devassets check <project>` | Check asset health; `--fail-on-risk` for CI |
+| `devassets identity <project>` | Resolve token → account/workspace; `--pin` to lock expected |
+| `devassets rotate <project> <key>` | Record rotation intent + instructions |
+| `devassets audit <project>` | View audit log |
+| `devassets export <project>` | Export a signed (optionally AES-encrypted) manifest |
+| `devassets verify <project>` | Verify a manifest's signature |
+
+### Workspace & tooling
+
+| Command | Description |
+|---|---|
+| `devassets init` | Initialize database and signing key |
+| `devassets add-project <name>` | Register a project |
+| `devassets doctor` | Global health report across all projects; `--fix` to re-scan |
+| `devassets portfolio` | Point-in-time snapshot of all projects under a root |
+| `devassets ui` | Start web dashboard at localhost:9090 |
+| `devassets serve` | Start MCP server (stdio) for Claude Code / Cursor |
+| `devassets install-skills` | Install Claude Code slash commands |
+
+---
+
+## Vault — Security Design
+
+DevAssets stores secrets locally on your machine with no external service involved.
+
+- **AES-256-GCM** encryption per secret value — each with a unique 12-byte random IV
+- **HKDF-SHA256** key derivation from your local signing key — no separate vault password
+- **Values never logged or exported** — `list`, `audit`, and `export` show key names and metadata only
+- **Agent (MCP) access is metadata-only** by default — reading a value requires an explicit `get` or `inject` call
+- **Cross-project sharing is always explicit** — no automatic propagation between projects
+
+> **Important:** Keep `~/.devassets/` off cloud sync (iCloud, Dropbox, dotfiles repos). The vault encryption key is derived from `~/.devassets/signature.key` — if that file leaks, vault secrets are recoverable. `devassets init` prints this warning.
+
+---
+
+## Credential Identity Resolution
+
+`devassets identity <project>` reads each provider token transiently, calls the provider's identity API, and records only the result — never the token value.
+
 **Supported providers** (matched by env var name):
 
 | Provider | Env var pattern | Resolves |
 |---|---|---|
 | Vercel | `VERCEL_TOKEN`, `VERCEL_API_TOKEN` | account email + teams |
-| Supabase | `SUPABASE_ACCESS_TOKEN` / `SUPABASE_URL` | org + project refs (URL parsed offline) |
+| Supabase | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_URL` | org + project ref (URL parsed offline) |
 | Neon | `NEON_API_KEY` | account + projects |
 | npm | `NPM_TOKEN`, `NODE_AUTH_TOKEN` | username |
-| Google Cloud | `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_SERVICE_ACCOUNT` | service account email + project_id (parsed offline) |
-| Paddle / Stripe | `PADDLE_API_KEY` / `STRIPE_SECRET_KEY` | webhook + key status (via `check`) |
+| Google Cloud | `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_SERVICE_ACCOUNT` | service account email + project (parsed offline) |
+| Stripe / Paddle | `STRIPE_SECRET_KEY`, `PADDLE_API_KEY` | key status + webhook check |
+
+Pin the expected account/workspace with `--pin`. Every subsequent `identity` run compares against the pin and warns on drift.
 
 ---
 
 ## `.devassets.yml` (optional, per project)
 
-Zero-config works for most projects. Drop a `.devassets.yml` at the project root only when you need to be explicit:
+Zero-config works out of the box. Add this file only when you need explicit control:
 
 ```yaml
-# Monorepo scan roots (else auto-detected from workspace manifest or discovery)
+# Monorepo scan roots
 roots:
   - web
   - api
 
-# Where each secret actually lives — so cloud/CI/runtime secrets aren't flagged "missing"
+# Where each secret actually lives — prevents cloud/CI keys from being flagged "missing"
 secrets:
-  VERCEL_TOKEN: cloud-platform        # managed in the Vercel dashboard
+  VERCEL_TOKEN: cloud-platform        # managed in Vercel dashboard
   SUPABASE_SERVICE_ROLE_KEY: cloud-platform
   APPLE_PRIVATE_KEY: ci-secret        # GitHub Actions secret
   ANTHROPIC_API_KEY: runtime-user     # end-user provides at runtime
   PADDLE_CLIENT_TOKEN: source-public  # publishable, lives in source
-  # unlisted keys default to local-env (normal missing-detection)
 ```
 
-Locations: `local-env` (default) · `cloud-platform` · `ci-secret` · `runtime-user` · `source-public` · `external-vault`.
-Non-`local-env` keys show as **managed** (☁) instead of missing — closing the "the token isn't local but that's correct" gap for desktop/mobile/cloud-deployed projects.
+Locations: `local-env` (default) · `cloud-platform` · `ci-secret` · `runtime-user` · `source-public` · `external-vault`
 
-**Project type matters.** The `--type` you set at `add-project` (saas/desktop/mobile/library) tunes severity: for `desktop`/`mobile`/`library`, a missing secret is relaxed to a low-severity note (these forms keep secrets in CI/keystore/runtime, not local `.env`), and you're nudged to declare its real location above. `saas`/web keep strict missing-secret detection.
-
-## Web Dashboard
-
-```bash
-devassets ui --port=9090   # http://localhost:9090 (bound to 127.0.0.1)
-```
-
-Per-project view: asset table, missing-key risks, payment platform status, and a **Credential Identities** panel showing account/workspace/project per token with mismatch warnings.
+Non-`local-env` keys show as **managed** (☁) instead of missing.
 
 ---
 
 ## MCP Integration (Claude Code / Cursor)
 
-`.claude/settings.json`:
+Use DevAssets as an MCP server so your AI agent can query credential health and manage assets directly.
 
+`.claude/settings.json`:
 ```json
 {
   "mcpServers": {
@@ -289,34 +234,33 @@ Per-project view: asset table, missing-key risks, payment platform status, and a
 }
 ```
 
-| Tool | Description |
-|---|---|
-| `devassets_list_projects` | List all projects and health status |
-| `devassets_check` | Check a project's assets and risks |
-| `devassets_scan` | Scan and update asset records |
-| `devassets_identity` | Resolve token → account/workspace; detect mismatch |
-| `devassets_export` | Export a signed manifest |
-| `devassets_health` | Quick health summary across projects |
-| `devassets_doctor` | Global health report |
-| `devassets_audit` | Query audit log |
-| `devassets_rotate` | Initiate key rotation |
-| `devassets_add_project` | Register a new project |
-| `devassets_ci_snippet` | Generate a GitHub Actions CI workflow |
-| `devassets_skills` | Return installable Claude Code skills |
+Available MCP tools: `devassets_list_projects`, `devassets_check`, `devassets_scan`, `devassets_identity`, `devassets_export`, `devassets_health`, `devassets_doctor`, `devassets_audit`, `devassets_rotate`, `devassets_add_project`, `devassets_ci_snippet`, `devassets_skills`
 
-> *"Which projects have credential mismatches or missing production secrets?"*
-> *"Resolve the accounts for all tokens in company-app."*
+> *"Check all my projects and tell me which ones have missing production secrets."*
+> *"Resolve the accounts for all tokens in company-app and flag any mismatches."*
+
+**Claude Code skills** (`devassets install-skills`): installs `/devassets-check` and `/devassets-ci` slash commands locally.
 
 ---
 
-## Security Model
+## Web Dashboard
 
-- **No secret values stored.** Key *names* and resolved *metadata* only.
-- **Transient value reads.** `identity`/`check` read a token value in-memory to call the provider, then discard it. This is the single, deliberately-scoped exception to names-only — values are never written to disk or logs.
-- **Signed exports.** HMAC-SHA256 with a local key (`~/.devassets/signature.key`, mode 600, atomically created).
-- **Opt-in encryption.** AES-256-GCM, scrypt N=65536; password never persisted.
-- **Local-only.** `~/.devassets/devassets.db` (SQLite). No cloud, no telemetry.
-- **Dashboard is localhost-only** (127.0.0.1, CORS restricted).
+```bash
+devassets ui   # opens http://localhost:9090
+```
+
+Per-project view: asset table, missing-key risks, payment platform status, and a Credential Identities panel with account/workspace/mismatch warnings.
+
+---
+
+## Requirements & Installation
+
+- **Node.js 22.5+** (uses built-in `node:sqlite` — no native compilation)
+
+```bash
+npm install -g @hyphen-network/devassets
+devassets init
+```
 
 ---
 
@@ -324,13 +268,113 @@ Per-project view: asset table, missing-key risks, payment platform status, and a
 
 ```
 ~/.devassets/
-  devassets.db        Projects, assets, identities (metadata only), audit logs
-  signature.key       32-byte HMAC signing key (chmod 600, auto-generated)
-  permissions.yml     RBAC config
+  devassets.db      Projects, assets, identities, audit logs, encrypted vault
+  signature.key     32-byte signing key (chmod 600, auto-generated)
+  permissions.yml   RBAC config
 ```
+
+All data stays on your machine. No cloud sync, no account, no telemetry.
 
 ---
 
 ## License
 
 MIT — part of [Hyphen Network](https://github.com/0xRyanlee).
+
+---
+
+<a name="multilingual"></a>
+
+## 多語言介紹 / Multilingual Introduction
+
+---
+
+### 中文 (Traditional Chinese)
+
+**DevAssets 是獨立開發者的本地加密環境變數管理器。**
+
+你同時維護多個專案，每個都有自己的 `.env`、Vercel 專案、Supabase 資料庫、API 金鑰和支付 secret。每次部署前你都要手動核對一遍，總有漏掉的；token 是哪個帳號的記不清楚；staging 和 production 的金鑰容易貼錯。
+
+DevAssets 用一個 CLI 解決這些問題：
+
+- **本地加密保存 secret 值**（AES-256-GCM），不上雲、不需要帳號
+- **`devassets run myapp -- npm run migrate`** — 自動注入 secret 到子命令，不經過 shell 歷史記錄
+- **`devassets identity myapp`** — 自動解析每個 token 屬於哪個帳號，偵測 staging/prod 帳號混用
+- **`devassets check myapp --fail-on-risk`** — 部署前阻擋缺少的必要 secret，適合 CI 使用
+- **MCP 整合** — Claude Code / Cursor agent 可直接查詢憑證健康狀態
+
+```bash
+npm install -g @hyphen-network/devassets
+devassets init
+devassets set myapp DATABASE_URL   # 隱藏輸入，不進 shell history
+devassets run myapp -- npm run migrate
+```
+
+---
+
+### 日本語 (Japanese)
+
+**DevAssets は、インディー開発者向けのローカル暗号化シークレットマネージャーです。**
+
+複数のプロジェクトを管理していると、`.env` ファイル、Vercel トークン、Supabase の接続文字列、Stripe キー、GCP サービスアカウントがプロジェクトごとにバラバラに存在します。どのトークンがどのアカウントに属しているか把握できなくなり、ステージング環境のキーを本番にうっかり貼り付けてしまうことも。
+
+DevAssets はこれを解決します：
+
+- **AES-256-GCM でシークレット値をローカル暗号化保存** — クラウド不要、アカウント不要
+- **`devassets run myapp -- node server.js`** — シークレットをサブコマンドに直接注入（シェル履歴に残らない）
+- **`devassets identity myapp`** — 各トークンがどのアカウント/ワークスペースに属するか自動解決。ステージング/本番の混在を検知
+- **`devassets check myapp --fail-on-risk`** — デプロイ前に必須シークレットの欠如をブロック（CI対応）
+- **MCP サーバー** — Claude Code / Cursor からエージェントが直接クレデンシャルを管理
+
+```bash
+npm install -g @hyphen-network/devassets
+devassets init
+devassets set myapp DATABASE_URL   # 非表示入力、履歴に残らない
+devassets run myapp -- npm run migrate
+```
+
+---
+
+### Français (French)
+
+**DevAssets est un gestionnaire de secrets local et chiffré pour les développeurs indépendants.**
+
+Vous gérez plusieurs projets, chacun avec ses propres variables d'environnement, tokens Vercel, connexions Supabase, clés Stripe et comptes Google Cloud. Vous ne savez plus quel token appartient à quel compte, et vous risquez de mélanger les environnements staging et production.
+
+DevAssets résout ces problèmes :
+
+- **Stockage chiffré local des valeurs secrètes** (AES-256-GCM) — aucun cloud, aucun compte requis
+- **`devassets run myapp -- npm run migrate`** — injecte les secrets dans les sous-commandes sans passer par l'historique du shell
+- **`devassets identity myapp`** — résout automatiquement à quel compte/espace de travail appartient chaque token. Détecte les mélanges staging/production
+- **`devassets check myapp --fail-on-risk`** — bloque les déploiements si des secrets requis sont manquants (intégration CI)
+- **Serveur MCP** — les agents Claude Code / Cursor peuvent interroger directement l'état des identifiants
+
+```bash
+npm install -g @hyphen-network/devassets
+devassets init
+devassets set myapp DATABASE_URL   # saisie masquée, pas d'historique shell
+devassets run myapp -- npm run migrate
+```
+
+---
+
+### Italiano (Italian)
+
+**DevAssets è un gestore di segreti locale e cifrato per sviluppatori indipendenti.**
+
+Gestisci più progetti, ognuno con le proprie variabili d'ambiente, token Vercel, connessioni Supabase, chiavi Stripe e account Google Cloud. Non ricordi più a quale account appartiene ogni token, e rischi di confondere le chiavi di staging con quelle di produzione.
+
+DevAssets risolve questi problemi:
+
+- **Archiviazione cifrata locale dei valori segreti** (AES-256-GCM) — nessun cloud, nessun account necessario
+- **`devassets run myapp -- npm run migrate`** — inietta i segreti nei sottocomandi senza passare per la cronologia della shell
+- **`devassets identity myapp`** — risolve automaticamente a quale account/workspace appartiene ogni token. Rileva confusioni tra staging e produzione
+- **`devassets check myapp --fail-on-risk`** — blocca i deploy se mancano segreti richiesti (integrabile in CI)
+- **Server MCP** — gli agenti Claude Code / Cursor possono interrogare direttamente lo stato delle credenziali
+
+```bash
+npm install -g @hyphen-network/devassets
+devassets init
+devassets set myapp DATABASE_URL   # input nascosto, nessuna traccia nella shell
+devassets run myapp -- npm run migrate
+```

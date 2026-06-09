@@ -1,7 +1,7 @@
 {
   "name": "@hyphen-network/devassets",
   "version": "0.9.0",
-  "description": "Developer asset management system for independent developers",
+  "description": "Local-first developer secrets manager — store encrypted env vars, manage API keys across projects, resolve provider identities, and inject secrets into commands. CLI + MCP server + web dashboard. No cloud, no account.",
   "type": "module",
   "bin": {
     "devassets": "./dist/index.js"
@@ -51,11 +51,26 @@
     "node": ">=22.5.0"
   },
   "keywords": [
-    "devtools",
-    "assets",
-    "environment",
+    "secrets-manager",
+    "env-manager",
+    "dotenv",
+    "api-key-manager",
+    "developer-secrets",
+    "local-secrets",
+    "environment-variables",
+    "vault",
+    "cli",
     "mcp",
-    "cli"
+    "devtools",
+    "credential-management",
+    "env",
+    "secrets",
+    "developer-tools",
+    "multi-project",
+    "indie-dev",
+    "vercel",
+    "supabase",
+    "claude-code"
   ],
   "license": "MIT",
   "repository": {
