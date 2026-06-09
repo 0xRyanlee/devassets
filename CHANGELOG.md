@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0 — 2026-06-10
+
+### Phase 1 Vault — local-first encrypted secrets manager
+
+**Product pivot**: DevAssets is now a local-first developer secrets / env manager for
+centralising environment variables, account identities, gap detection, and quick injection
+across multiple projects.
+
+**New vault commands:**
+- `set <project> <key> [value]` — encrypt and store a secret (AES-256-GCM per-value IV);
+  prompts with hidden TTY input when value omitted
+- `get <project> <key>` — decrypt and print a value; `--raw` omits trailing newline for
+  subshell capture
+- `list <project>` — show stored key names and metadata; values are **never** shown
+- `unset <project> <key>` — delete a secret with confirmation prompt (`--yes` to skip)
+- `inject <project>` — load secrets into current process environment; `--print` outputs
+  `export KEY=value` statements instead
+- `run <project> -- <cmd>` — execute a command with secrets injected as env variables
+
+**Crypto design:**
+- Vault key derived from the existing signature key via HKDF-SHA256 with salt
+  `devassets-vault-v1` — no separate key file needed
+- Each secret encrypted with AES-256-GCM, unique 12-byte IV per operation
+- `encrypted_value`, `iv`, and `auth_tag` stored separately in `secret_values` table
+
+**DB migration:** `secret_values` table added (schema is forwards-compatible via `CREATE TABLE IF NOT EXISTS`).
+
+110 tests pass.
+
+---
+
 ## 0.8.1 — 2026-06-10
 
 ### Robustness — fault tolerance, defensive guards, security hardening

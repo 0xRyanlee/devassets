@@ -13,13 +13,19 @@ import { doctorCommand } from './commands/doctor.js';
 import { installSkillsCommand } from './commands/install-skills.js';
 import { identityCommand } from './commands/identity.js';
 import { portfolioCommand } from './commands/portfolio.js';
+import { setCommand } from './commands/set.js';
+import { getCommand } from './commands/get.js';
+import { listCommand } from './commands/list.js';
+import { unsetCommand } from './commands/unset.js';
+import { injectCommand } from './commands/inject.js';
+import { runCommand } from './commands/run.js';
 
 const program = new Command();
 
 program
   .name('devassets')
   .description('Developer asset management for independent developers')
-  .version('0.7.0');
+  .version('0.9.0');
 
 program
   .command('init')
@@ -124,5 +130,55 @@ program
   .option('--no-github', 'Skip GitHub repository and workflow queries')
   .option('--json', 'Output full report as JSON')
   .action(portfolioCommand);
+
+// ── Vault commands ────────────────────────────────────────────────────────────
+
+program
+  .command('set <project> <key> [value]')
+  .description('Store an encrypted secret value for a project')
+  .option('--env <env>', 'Environment (default: local)')
+  .option('--provider <provider>', 'Provider hint (e.g. vercel, supabase)')
+  .option('--account <account>', 'Account/email hint')
+  .action(setCommand);
+
+program
+  .command('get <project> <key>')
+  .description('Retrieve a secret value (prints to stdout)')
+  .option('--env <env>', 'Environment (default: local)')
+  .option('--raw', 'No trailing newline (safe for subshell capture)')
+  .action(getCommand);
+
+program
+  .command('list <project>')
+  .description('List stored secret keys and metadata (values never shown)')
+  .option('--env <env>', 'Filter by environment')
+  .option('--json', 'Output JSON')
+  .action(listCommand);
+
+program
+  .command('unset <project> <key>')
+  .description('Delete a stored secret')
+  .option('--env <env>', 'Environment (default: local)')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .action(unsetCommand);
+
+program
+  .command('inject <project>')
+  .description('Load secrets into the current process environment (for scripting)')
+  .option('--env <env>', 'Environment (default: local)')
+  .option('--keys <keys>', 'Comma-separated list of keys to inject (default: all)', (v) => v.split(','))
+  .option('--print', 'Print export statements instead of mutating process.env')
+  .action(injectCommand);
+
+program
+  .command('run <project>')
+  .description('Run a command with secrets injected as environment variables')
+  .option('--env <env>', 'Environment (default: local)')
+  .option('--keys <keys>', 'Comma-separated list of keys to inject (default: all)', (v) => v.split(','))
+  .allowUnknownOption()
+  .action((projectId: string, options: { env?: string; keys?: string[] }, cmd) => {
+    const args = cmd.args.slice(1);
+    runCommand(projectId, args, options);
+  });
 
 export { program };

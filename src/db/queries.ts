@@ -1,4 +1,5 @@
 import { getDb } from './index.js';
+import { encryptVault, decryptVault } from '../utils/crypto.js';
 import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity } from '../types/index.js';
 
 type Row = Record<string, unknown>;
@@ -182,4 +183,68 @@ export function pinCredentialIdentity(projectId: string, keyName: string) {
   if (!r) return;
   db.prepare('UPDATE credential_identities SET expected_account=?, expected_workspace=? WHERE project_id=? AND key_name=?')
     .run((r['account'] as string | null) ?? null, (r['workspace'] as string | null) ?? null, projectId, keyName);
+}
+
+// ── Vault ────────────────────────────────────────────────────────────────────
+
+import { randomUUID } from 'crypto';
+
+export interface VaultSecretMeta {
+  key: string;
+  env: string;
+  provider?: string;
+  accountHint?: string;
+  workspaceHint?: string;
+  updatedAt: string;
+}
+
+export function setVaultSecret(
+  projectId: string,
+  env: string,
+  key: string,
+  plaintext: string,
+  hints?: { provider?: string; account?: string; workspace?: string },
+) {
+  const db = getDb();
+  const { ciphertext, iv, authTag } = encryptVault(plaintext);
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
+
+  if (existing) {
+    db.prepare(
+      'UPDATE secret_values SET encrypted_value=?, iv=?, auth_tag=?, provider=?, account_hint=?, workspace_hint=?, updated_at=? WHERE project_id=? AND env=? AND key=?',
+    ).run(ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, now, projectId, env, key);
+  } else {
+    db.prepare(
+      'INSERT INTO secret_values (id, project_id, env, key, encrypted_value, iv, auth_tag, provider, account_hint, workspace_hint, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+    ).run(randomUUID(), projectId, env, key, ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, now, now);
+  }
+}
+
+export function getVaultSecret(projectId: string, env: string, key: string): string | undefined {
+  const db = getDb();
+  const r = db.prepare('SELECT encrypted_value, iv, auth_tag FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
+  if (!r) return undefined;
+  return decryptVault(r['encrypted_value'] as string, r['iv'] as string, r['auth_tag'] as string);
+}
+
+export function listVaultSecrets(projectId: string, env?: string): VaultSecretMeta[] {
+  const db = getDb();
+  const rows = env
+    ? (db.prepare('SELECT key, env, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? ORDER BY env, key').all(projectId, env) as Row[])
+    : (db.prepare('SELECT key, env, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? ORDER BY env, key').all(projectId) as Row[]);
+  return rows.map(r => ({
+    key: r['key'] as string,
+    env: r['env'] as string,
+    provider: (r['provider'] as string) ?? undefined,
+    accountHint: (r['account_hint'] as string) ?? undefined,
+    workspaceHint: (r['workspace_hint'] as string) ?? undefined,
+    updatedAt: r['updated_at'] as string,
+  }));
+}
+
+export function deleteVaultSecret(projectId: string, env: string, key: string): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM secret_values WHERE project_id=? AND env=? AND key=?').run(projectId, env, key);
+  return (result as { changes: number }).changes > 0;
 }

@@ -43,11 +43,10 @@ DevAssets gives you one place to see all of it — **without ever storing your s
 
 ### ❌ It does NOT do (boundaries)
 
-- **Does not store secret values.** It records key *names* and resolved *metadata* (account/workspace/validity). Token values are read transiently to call a provider API, used in-memory, and discarded — never written to disk.
-- **Is not a secrets manager / vault.** It doesn't inject secrets into your runtime or replace Vault / Doppler / 1Password. It's the *map and health-check layer* on top of wherever your secrets actually live.
-- **Is not a cloud service.** Everything is local SQLite at `~/.devassets/`. No sync, no account, no telemetry.
+- **Does not sync to the cloud.** Everything stays in local SQLite at `~/.devassets/`. No account, no telemetry, no third-party service.
 - **Does not rotate keys for you.** `rotate` records intent + gives instructions; you perform the rotation in the provider dashboard.
 - **Does not run in the background.** It's event-driven — runs only when you (or an agent) call it.
+- **Agent access is metadata-only by default.** The MCP server exposes key names, health status, and identity records — not secret values. Values require an explicit `get` or `inject` call.
 
 ---
 
@@ -107,7 +106,16 @@ devassets identity paperclip
 # 6. Once verified correct, pin expected identities — future drift will warn
 devassets identity paperclip --pin
 
-# 7. See everything across all projects
+# 7. Store secrets in the local encrypted vault
+devassets set paperclip DATABASE_URL                 # prompts, hidden input
+devassets set paperclip STRIPE_SECRET_KEY sk_live_… --provider=stripe
+devassets list paperclip                             # key names + metadata only
+devassets get paperclip DATABASE_URL                 # decrypt to stdout
+
+# 8. Inject into a command run (secrets never written to disk)
+devassets run paperclip -- npm run migrate
+
+# 9. See everything across all projects
 devassets doctor
 ```
 
@@ -131,6 +139,48 @@ devassets doctor
 | `devassets serve` | Start MCP server (stdio) |
 | `devassets install-skills` | Install Claude Code slash commands (`/devassets-check`, `/devassets-ci`) |
 | `devassets portfolio` | Inspect all projects under a root directory and write a traceable portfolio snapshot |
+| **Vault** | |
+| `devassets set <project> <key> [value]` | Encrypt and store a secret value locally |
+| `devassets get <project> <key>` | Decrypt and print a secret value |
+| `devassets list <project>` | List stored key names and metadata (values never shown) |
+| `devassets unset <project> <key>` | Delete a stored secret |
+| `devassets inject <project>` | Load secrets into current shell env; `--print` outputs `export` statements |
+| `devassets run <project> -- <cmd>` | Run a command with secrets injected as env variables |
+
+---
+
+## Local Vault
+
+DevAssets includes a local encrypted vault for storing secret values alongside their metadata. Values are encrypted with **AES-256-GCM** using a key derived from your local signature key via HKDF — no separate master password or key file required.
+
+```bash
+# Store a secret (prompts with hidden input if value omitted)
+devassets set myapp DATABASE_URL
+
+# Store with provider hint for display
+devassets set myapp STRIPE_SK sk_live_… --provider=stripe --account=billing@company.com
+
+# List stored keys — values never exposed
+devassets list myapp
+# myapp [local]
+#   DATABASE_URL                     2026-06-10
+#   STRIPE_SK          (stripe)      2026-06-10
+
+# Retrieve a value
+devassets get myapp DATABASE_URL
+
+# Inject all secrets into a subcommand
+devassets run myapp -- node server.js
+
+# Shell eval pattern (export into current shell)
+eval "$(devassets inject myapp --print)"
+```
+
+**Security design:**
+- Each value encrypted with a unique 12-byte random IV — no two ciphertexts are alike
+- Vault key derived via `HKDF-SHA256(sigKey, salt="devassets-vault-v1")` — key never written to disk
+- Agent (MCP) access sees key names and metadata only; getting a value requires an explicit `get` call
+- Cross-project sharing is always explicit — no automatic propagation between projects
 
 ---
 
