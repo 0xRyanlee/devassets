@@ -124,39 +124,41 @@ devassets doctor
 | `devassets identity <project>` | Resolve token → account/workspace/project; `--pin` to lock expected |
 | `devassets doctor` | Global health report across all projects; `--fix` to re-scan all |
 | `devassets export <project>` | Export a signed (optionally encrypted) manifest |
-| `devassets verify <project>` | Verify a manifest's signature |
+| `devassets verify <project>` | Verify a manifest's signature; `--json` for machine-readable output |
 | `devassets rotate <project> <key>` | Record rotation intent + instructions |
 | `devassets audit <project>` | View audit log |
 | `devassets ui` | Start web dashboard at localhost:9090 |
 | `devassets serve` | Start MCP server (stdio) |
 | `devassets install-skills` | Install Claude Code slash commands (`/devassets-check`, `/devassets-ci`) |
-| `devassets portfolio` | Inspect Astoria projects and write a traceable portfolio snapshot for the separate Overview dashboard |
+| `devassets portfolio` | Inspect all projects under a root directory and write a traceable portfolio snapshot |
 
 ---
 
-## Astoria Portfolio
+## Portfolio Report
 
-In this workflow, **Astoria** is the local project collection rooted at `/Volumes/Astoria/Projects`. The portfolio command is an optional workspace-level report generator; it does not change DevAssets' normal per-project credential database.
+The `portfolio` command is an optional workspace-level report generator. It inspects all sub-projects under a root directory and writes an immutable point-in-time snapshot. It does not affect DevAssets' per-project credential database.
 
-- `devassets ui` is the credential dashboard at `127.0.0.1:9090`.
-- Astoria Overview is the separate HTMX portfolio dashboard at `/Volumes/Astoria/Projects/overview`.
-- A portfolio snapshot contains project purpose and stage, Git/GitHub and CI signals, detected stack, DevAssets asset health, evidence files, and a recommended next action.
+A portfolio snapshot contains: project purpose and stage, Git/GitHub and CI signals, detected stack, DevAssets asset health, evidence files, and a recommended next action.
 
 ```bash
-devassets portfolio \
-  --root=/Volumes/Astoria/Projects \
-  --overview=/Volumes/Astoria/Projects/overview
+# Scan current directory and write snapshots to ./overview/
+devassets portfolio
+
+# Specify root and output location explicitly
+devassets portfolio --root=/path/to/projects --overview=/path/to/projects/overview
+
+# Output full report as JSON (for piping / dashboards)
+devassets portfolio --json
 ```
 
-Run it when you need a new point-in-time portfolio report. It atomically updates `data/current.json` after writing an immutable `data/history/YYYY/MM/DD/<run-id>.json`, a human-readable Markdown log, and the append-only `logs/runs.jsonl` index.
+Run it when you need a new point-in-time portfolio report. It atomically updates `overview/data/current.json` after writing an immutable `overview/data/history/YYYY/MM/DD/<run-id>.json`, a human-readable Markdown log, and the append-only `overview/logs/runs.jsonl` index.
 
-| Option | Purpose |
-|---|---|
-| `--root <path>` | Project collection to inspect |
-| `--overview <path>` | Overview project where snapshots and logs are written |
-| `--no-github` | Skip live GitHub queries and use the latest local observation when available |
-
-From the Overview project, `npm run refresh` builds DevAssets and invokes the same command with the standard Astoria paths.
+| Option | Default | Purpose |
+|---|---|---|
+| `--root <path>` | current directory | Project collection root to inspect |
+| `--overview <path>` | `<root>/overview` | Output root for snapshots and logs |
+| `--no-github` | — | Skip live GitHub queries; use latest local observation |
+| `--json` | — | Output full report as JSON instead of summary |
 
 ---
 

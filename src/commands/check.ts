@@ -19,6 +19,7 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
   const project = getProject(projectId);
   if (!project) {
     logger.error(`Project not found: ${projectId}`);
+    logger.raw(`  Run: devassets add-project ${projectId} --path=<path> to register it first`);
     process.exit(1);
   }
 

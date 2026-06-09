@@ -9,6 +9,7 @@ interface VerifyOptions {
   manifest?: string;
   decrypt?: boolean;
   password?: string;
+  json?: boolean;
 }
 
 export function verifyCommand(projectId: string, options: VerifyOptions) {
@@ -20,6 +21,7 @@ export function verifyCommand(projectId: string, options: VerifyOptions) {
 
   if (!options.manifest) {
     logger.error('--manifest=<path> is required');
+    logger.raw(`  Hint: devassets export ${projectId} --output=manifest.yml  then  devassets verify ${projectId} --manifest=manifest.yml`);
     process.exit(1);
   }
 
@@ -83,15 +85,19 @@ export function verifyCommand(projectId: string, options: VerifyOptions) {
       result: result.valid ? 'success' : 'failure',
     });
 
-    if (result.valid) {
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (result.valid) {
       logger.success(`Manifest verified: ${options.manifest}`);
     } else {
       logger.error(`Verification failed:`);
       for (const e of errors) logger.raw(`  - ${e}`);
     }
 
-    if (added.length > 0) logger.warn(`New assets not in manifest: ${added.join(', ')}`);
-    if (removed.length > 0) logger.warn(`Assets in manifest but not current: ${removed.join(', ')}`);
+    if (!options.json) {
+      if (added.length > 0) logger.warn(`New assets not in manifest: ${added.join(', ')}`);
+      if (removed.length > 0) logger.warn(`Assets in manifest but not current: ${removed.join(', ')}`);
+    }
 
     if (!result.valid) process.exit(1);
   } catch (err) {

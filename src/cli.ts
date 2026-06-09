@@ -66,6 +66,7 @@ program
   .option('--manifest <path>', 'Path to manifest file')
   .option('--decrypt', 'Decrypt before verifying')
   .option('--password <password>', 'Decryption password')
+  .option('--json', 'Output JSON')
   .action(verifyCommand);
 
 program
@@ -117,10 +118,11 @@ program
 
 program
   .command('portfolio')
-  .description('Generate an Astoria project portfolio report')
-  .option('--root <path>', 'Projects root', '/Volumes/Astoria/Projects')
-  .option('--overview <path>', 'Overview project root', '/Volumes/Astoria/Projects/overview')
+  .description('Generate a portfolio report for all projects under a root directory')
+  .option('--root <path>', 'Projects root directory (default: current directory)')
+  .option('--overview <path>', 'Output root for snapshots and logs (default: <root>/overview)')
   .option('--no-github', 'Skip GitHub repository and workflow queries')
+  .option('--json', 'Output full report as JSON')
   .action(portfolioCommand);
 
 export { program };
