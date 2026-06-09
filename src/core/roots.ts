@@ -3,6 +3,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { ENV_FILE_PATTERNS, EXAMPLE_FILE_PATTERNS } from '../utils/constants.js';
 import { readEnvValue } from '../utils/dotenv.js';
+import { logger } from '../utils/logger.js';
 
 // Transiently read a secret value across all scan roots (monorepo-aware). Never persisted.
 export function readProjectEnvValue(projectPath: string, keyName: string): string | undefined {
@@ -54,7 +55,8 @@ export function readKeyLocations(projectPath: string): Record<string, string> {
   try {
     const doc = yaml.load(fs.readFileSync(file, 'utf-8')) as { secrets?: Record<string, string> } | null;
     return doc?.secrets ?? {};
-  } catch {
+  } catch (err) {
+    logger.warn(`.devassets.yml parse error in ${projectPath} — secrets: config ignored (${err instanceof Error ? err.message : err})`);
     return {};
   }
 }
@@ -66,7 +68,8 @@ function readDevassetsRoots(projectPath: string): string[] {
   try {
     const doc = yaml.load(fs.readFileSync(file, 'utf-8')) as { roots?: string[] } | null;
     return (doc?.roots ?? []).filter(r => typeof r === 'string').map(normalizeRel);
-  } catch {
+  } catch (err) {
+    logger.warn(`.devassets.yml parse error in ${projectPath} — roots: config ignored, falling back to discovery (${err instanceof Error ? err.message : err})`);
     return [];
   }
 }

@@ -28,6 +28,10 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
 
   try {
     const assets = getAssets(projectId, options.env);
+    if (assets.length === 0 && active) {
+      sp.stop();
+      logger.warn(`No assets found for ${project.name} — run "devassets scan ${projectId}" first`);
+    }
     const platforms = getPaymentPlatforms(projectId);
 
     let result = validateAssets(assets, projectId, options.env, project.type);

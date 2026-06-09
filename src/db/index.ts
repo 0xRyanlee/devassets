@@ -6,8 +6,18 @@ let _db: DatabaseSync | null = null;
 
 export function getDb(): DatabaseSync {
   if (!_db) {
-    fs.mkdirSync(DEVASSETS_DIR, { recursive: true });
-    _db = new DatabaseSync(DB_PATH);
+    try {
+      fs.mkdirSync(DEVASSETS_DIR, { recursive: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Cannot create DevAssets config directory at ${DEVASSETS_DIR}: ${msg}\nRun with sufficient permissions or set a writable HOME directory.`);
+    }
+    try {
+      _db = new DatabaseSync(DB_PATH);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Cannot open DevAssets database at ${DB_PATH}: ${msg}\nTry running "devassets init" or check disk space.`);
+    }
     runMigrations(_db);
   }
   return _db;
