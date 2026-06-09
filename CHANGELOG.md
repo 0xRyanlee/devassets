@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.8.1 — 2026-06-10
+
+### Robustness — fault tolerance, defensive guards, security hardening
+
+Addresses findings from a graph-exploration + intent + user-journey audit focused on
+failure paths, silent degradation, and defensive design.
+
+**Fault tolerance:**
+- `db/index.ts` — DB init failures (permissions, disk full) now emit user-friendly error
+  messages with recovery instructions instead of raw Node.js stack traces.
+- `core/roots.ts` — `.devassets.yml` YAML parse errors now emit `logger.warn` and fall
+  back to discovery mode; previously the failure was silently swallowed.
+- `utils/crypto.ts` — `signature.key` is validated to be ≥ 32 bytes on read; a truncated
+  or empty key now throws a clear error with instructions to regenerate.
+
+**Security hardening:**
+- `mcp/server.ts` — MCP `output_path` now also resolves symlinks on the parent directory
+  (`fs.realpathSync`) after the string-prefix check, blocking symlink traversal attacks.
+- `db/queries.ts` — `upsertCredentialIdentity` truncates `account`/`workspace` to 1 024 chars
+  and `projects` JSON to 8 192 chars to prevent provider response bloat from expanding the DB.
+
+**Defensive UX:**
+- `commands/export.ts` — `--encrypt --encrypt-for` now requires a password of at least
+  8 characters; shorter passwords are rejected with exit 1.
+- `commands/check.ts` — warns "run devassets scan first" when a project has 0 assets,
+  preventing the misleading "HEALTHY" status for unscanned projects.
+- `core/identity.ts` — provider API calls now have a 10-second timeout with proper timer
+  cleanup; previously a hanging network call would block the command indefinitely.
+- `commands/verify.ts` — YAML parse errors now include a hint to try `--decrypt` if the
+  manifest appears to be encrypted.
+
+96 tests pass.
+
+---
+
+## 0.8.0 — 2026-06-10
+
+### UX polish — flow hints, `--json` consistency, portfolio ergonomics
+
+Addresses findings from a graph-exploration + user-journey + intent audit.
+
+**New flags:**
+- `verify` now supports `--json` for machine-readable output (CI pipelines).
+- `portfolio` now supports `--json` to output the full report as structured JSON.
+
+**Error guidance:**
+- `check` — project-not-found error now shows the `add-project` command to run.
+- `verify` — missing `--manifest` error now shows the full `export → verify` workflow.
+
+**Flow hints:**
+- `init` — next steps now include `check` and `identity` (was: only `add-project` + `scan`).
+- `export` — after writing a file, shows the matching `verify` command to run next.
+- `portfolio` — shows a next-step hint pointing to the generated `current.json`.
+
+**Portfolio ergonomics:**
+- Default `--root` changed from hardcoded `/Volumes/Astoria/Projects` to `process.cwd()`.
+- Default `--overview` changed to `<root>/overview` (relative to root).
+- Description no longer mentions Astoria-specific paths.
+
+**Docs:**
+- README Portfolio section rewritten with generic paths and a full options table.
+- `ARCHITECTURE.md` Security Invariant #5 clarified: MCP tool invocations of
+  `devassets_check` are treated as explicit invocations (equivalent to CLI `check`).
+
+96 tests pass.
+
+---
+
 ## 0.7.0 — 2026-06-08
 
 ### Features — form-aware severity (Axis C); completes the classification model
