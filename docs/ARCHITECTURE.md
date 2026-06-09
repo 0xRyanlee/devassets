@@ -5,17 +5,17 @@
 ```
 devassets/
 ├── src/
-│   ├── cli.ts                 Commander entry — 13 commands
+│   ├── cli.ts                 Commander entry — 14 commands
 │   ├── commands/              One file per CLI command
-│   ├── core/                  scanner, validator, exporter, identity, roots
+│   ├── core/                  scanner, validator, exporter, identity, roots, portfolio
 │   ├── integrations/          paddle, stripe + providers/ (vercel, supabase, neon, npm, gcloud)
 │   ├── db/                    node:sqlite schema + queries
 │   ├── mcp/                   MCP server (12 tools) + skills loader
 │   ├── types/                 assets, export, identity
-│   └── utils/                 crypto, dotenv, constants (classifyKey), spinner, logger
+│   └── utils/                 crypto, dotenv, constants (classifyKey), slug, spinner, logger
 ├── ui/                        React 18 + Vite + Tailwind + shadcn/ui dashboard
 ├── skills/                    Claude Code slash commands (devassets-check, devassets-ci)
-├── tests/                     vitest unit + integration (92 tests)
+├── tests/                     vitest unit + integration
 └── docs/                      Design + research documents
 ```
 
@@ -39,6 +39,7 @@ devassets/
 3. **classification** (`utils/constants.ts classifyKey`) — Axis A: public / secret / identifier / config.
 4. **validator** (`core/validator.ts`) — severity from sensitivity + environment + project form (Axis C); managed never risks.
 5. **identity** (`core/identity.ts` + `integrations/providers/`) — transiently read token values across roots, resolve account/workspace/projects via provider APIs, store metadata (never the token); `--pin` baselines expected identity for mismatch detection.
+6. **portfolio** (`core/portfolio.ts`) — inspect project, Git/GitHub, CI, and asset signals; write immutable run snapshots plus an atomically replaced current report.
 
 ## Classification model (3 axes)
 
