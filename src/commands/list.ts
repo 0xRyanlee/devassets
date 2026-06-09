@@ -36,11 +36,13 @@ export function listCommand(projectId: string, options: ListOptions) {
   }
 
   for (const [env, entries] of byEnv) {
+    // Dynamic key column width: max key length in this batch, min 24
+    const colWidth = Math.max(24, ...entries.map(s => s.key.length)) + 2;
     if (!options.env) logger.raw(`  [${env}]`);
     for (const s of entries) {
       const hints = [s.provider, s.accountHint, s.workspaceHint].filter(Boolean).join(' · ');
       const updated = s.updatedAt.slice(0, 10);
-      logger.raw(`    ${s.key.padEnd(32)} ${hints ? `(${hints})` : ''}  ${updated}`);
+      logger.raw(`    ${s.key.padEnd(colWidth)}${hints ? `(${hints})  ` : ''}${updated}`);
     }
   }
   logger.raw('');

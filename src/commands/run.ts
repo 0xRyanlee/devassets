@@ -25,16 +25,38 @@ export function runCommand(projectId: string, args: string[], options: RunOption
     ? all.filter(s => options.keys!.includes(s.key))
     : all;
 
+  if (targets.length === 0) {
+    logger.warn(`No secrets found for ${project.name} [${env}]; running without injection`);
+  }
+
   const injected: Record<string, string> = {};
   for (const meta of targets) {
-    const value = getVaultSecret(projectId, env, meta.key);
-    if (value !== undefined) injected[meta.key] = value;
+    try {
+      const value = getVaultSecret(projectId, env, meta.key);
+      if (value !== undefined) injected[meta.key] = value;
+    } catch (err) {
+      logger.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
   }
 
   const child = spawnSync(args[0], args.slice(1), {
     stdio: 'inherit',
     env: { ...process.env, ...injected },
   });
+
+  if (child.error) {
+    logger.error(`Failed to start command: ${child.error.message}`);
+    process.exit(127);
+  }
+
+  if (child.signal) {
+    // POSIX convention: 128 + signal number
+    const sigMap: Record<string, number> = { SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 };
+    const sigNum = sigMap[child.signal] ?? 1;
+    logger.error(`Process killed by ${child.signal}`);
+    process.exit(128 + sigNum);
+  }
 
   process.exit(child.status ?? 1);
 }

@@ -1,6 +1,7 @@
-import { getProject, deleteVaultSecret } from '../db/queries.js';
+import { getProject, listVaultSecrets, deleteVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
+import readline from 'readline';
 
 interface UnsetOptions {
   env?: string;
@@ -16,7 +17,18 @@ export async function unsetCommand(projectId: string, key: string, options: Unse
 
   const env = options.env ?? 'local';
 
+  // Preflight: verify key exists before asking for confirmation
+  const existing = listVaultSecrets(projectId, env).find(s => s.key === key);
+  if (!existing) {
+    logger.error(`Secret not found: ${key} [${env}]`);
+    process.exit(1);
+  }
+
   if (!options.yes) {
+    if (!process.stdin.isTTY) {
+      logger.error('Interactive prompt required. Use --yes to bypass confirmation in non-TTY environments.');
+      process.exit(1);
+    }
     const confirmed = await confirm(`Delete ${key} [${env}] from ${project.name}? (y/N) `);
     if (!confirmed) {
       logger.info('Cancelled.');
@@ -25,7 +37,6 @@ export async function unsetCommand(projectId: string, key: string, options: Unse
   }
 
   const deleted = deleteVaultSecret(projectId, env, key);
-
   if (!deleted) {
     logger.error(`Secret not found: ${key} [${env}]`);
     process.exit(1);
@@ -45,12 +56,10 @@ export async function unsetCommand(projectId: string, key: string, options: Unse
 
 function confirm(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
-    process.stdout.write(prompt);
-    process.stdin.resume();
-    process.stdin.setEncoding('utf8');
-    process.stdin.once('data', (chunk) => {
-      process.stdin.pause();
-      resolve(chunk.toString().trim().toLowerCase() === 'y');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === 'y');
     });
   });
 }

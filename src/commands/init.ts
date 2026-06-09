@@ -14,6 +14,11 @@ export function initCommand() {
     logger.raw(`  Database:    ${DB_PATH}`);
     logger.raw(`  Config dir:  ${DEVASSETS_DIR}`);
     logger.raw('');
+    logger.raw('⚠  Security: keep ~/.devassets/ off cloud backups.');
+    logger.raw('   The vault encryption key is derived from signature.key in that directory.');
+    logger.raw('   If it leaks (iCloud, Time Machine, dotfiles repo), all stored secrets are exposed.');
+    logger.raw('   Add ~/.devassets/ to your .gitignore and backup exclusions.');
+    logger.raw('');
     logger.raw('Next steps:');
     logger.raw('  1. devassets add-project <name> --path=<path>');
     logger.raw('  2. devassets scan <project>');
