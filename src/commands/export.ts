@@ -25,6 +25,11 @@ export function exportCommand(projectId: string, options: ExportOptions) {
   const environment = options.env ?? 'production';
   const format = (options.format ?? 'manifest') as ManifestFormat;
 
+  if (options.encrypt && options.encryptFor && options.encryptFor.length < 8) {
+    logger.error('Encryption password must be at least 8 characters.');
+    process.exit(1);
+  }
+
   const sp = createSpinner(`Building ${format} for ${project.name}…`, !options.stdout).start();
 
   try {

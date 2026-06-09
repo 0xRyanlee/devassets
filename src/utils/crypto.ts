@@ -23,7 +23,11 @@ export function getSignatureKey(): Buffer {
     }
     return key;
   }
-  return fs.readFileSync(SIGNATURE_KEY_PATH);
+  const key = fs.readFileSync(SIGNATURE_KEY_PATH);
+  if (key.length < 32) {
+    throw new Error(`Signature key at ${SIGNATURE_KEY_PATH} is corrupt (${key.length} bytes, expected 32). Delete it and run "devassets init" to regenerate.`);
+  }
+  return key;
 }
 
 export function signContent(content: string, timestamp: string): string {

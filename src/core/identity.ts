@@ -26,7 +26,14 @@ export async function resolveProjectIdentities(project: Project): Promise<Provid
       }
 
       // value is used transiently here and never persisted
-      const resolved = await entry.resolve(value);
+      const RESOLVE_TIMEOUT_MS = 10_000;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const resolved = await Promise.race([
+        entry.resolve(value),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(`Provider API timeout after ${RESOLVE_TIMEOUT_MS / 1000}s`)), RESOLVE_TIMEOUT_MS);
+        }),
+      ]).finally(() => clearTimeout(timeoutId));
       upsertCredentialIdentity(project.id, { ...resolved, keyName: key.name, checkedAt: now });
     }
   }

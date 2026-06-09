@@ -101,7 +101,11 @@ export function verifyCommand(projectId: string, options: VerifyOptions) {
 
     if (!result.valid) process.exit(1);
   } catch (err) {
-    logger.error(`Verify failed: ${err instanceof Error ? err.message : err}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error(`Verify failed: ${msg}`);
+    if (!options.decrypt && (msg.toLowerCase().includes('yaml') || msg.toLowerCase().includes('parse') || msg.toLowerCase().includes('unexpected'))) {
+      logger.raw('  Hint: if this manifest is encrypted, add --decrypt --password=<password>');
+    }
     process.exit(1);
   }
 }

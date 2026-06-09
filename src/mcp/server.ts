@@ -13,7 +13,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.8.0',
+    version: '0.8.1',
   });
 
   server.tool(
@@ -102,11 +102,22 @@ export async function startMcpServer() {
       if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
 
       if (output_path) {
-        const { resolve: resolvePath, sep } = await import('path');
-        const resolved = resolvePath(output_path);
-        const cwd = resolvePath(process.cwd());
-        if (!resolved.startsWith(cwd + sep) && resolved !== cwd) {
+        const pathMod = await import('path');
+        const fsMod = await import('fs');
+        const resolved = pathMod.resolve(output_path);
+        const cwd = pathMod.resolve(process.cwd());
+        if (!resolved.startsWith(cwd + pathMod.sep) && resolved !== cwd) {
           return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path must be within current working directory` }) }] };
+        }
+        // Resolve symlinks on the parent directory to prevent symlink traversal attacks
+        try {
+          const parentReal = fsMod.realpathSync(pathMod.dirname(resolved));
+          const cwdReal = fsMod.realpathSync(cwd);
+          if (!parentReal.startsWith(cwdReal + pathMod.sep) && parentReal !== cwdReal) {
+            return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path resolves outside current working directory via symlink` }) }] };
+          }
+        } catch {
+          return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path parent directory does not exist` }) }] };
         }
       }
 

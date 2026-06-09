@@ -154,16 +154,24 @@ function computeMismatch(account?: string, workspace?: string, expAccount?: stri
   return false;
 }
 
+const MAX_IDENTITY_FIELD = 1024;
+const MAX_PROJECTS_JSON = 8192;
+
 export function upsertCredentialIdentity(projectId: string, id: ProviderIdentity) {
   const db = getDb();
-  const projects = id.projects ? JSON.stringify(id.projects) : null;
+  const rawProjects = id.projects ? JSON.stringify(id.projects) : null;
+  const projects = rawProjects && rawProjects.length > MAX_PROJECTS_JSON
+    ? rawProjects.slice(0, MAX_PROJECTS_JSON) + '…'
+    : rawProjects;
+  const account = id.account && id.account.length > MAX_IDENTITY_FIELD ? id.account.slice(0, MAX_IDENTITY_FIELD) : id.account;
+  const workspace = id.workspace && id.workspace.length > MAX_IDENTITY_FIELD ? id.workspace.slice(0, MAX_IDENTITY_FIELD) : id.workspace;
   const existing = db.prepare('SELECT expected_account, expected_workspace FROM credential_identities WHERE project_id=? AND key_name=?').get(projectId, id.keyName) as Row | undefined;
   if (existing) {
     db.prepare('UPDATE credential_identities SET provider=?, account=?, workspace=?, projects=?, valid=?, error=?, checked_at=? WHERE project_id=? AND key_name=?')
-      .run(id.provider, id.account ?? null, id.workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt, projectId, id.keyName);
+      .run(id.provider, account ?? null, workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt, projectId, id.keyName);
   } else {
     db.prepare('INSERT INTO credential_identities (project_id, key_name, provider, account, workspace, projects, valid, error, checked_at) VALUES (?,?,?,?,?,?,?,?,?)')
-      .run(projectId, id.keyName, id.provider, id.account ?? null, id.workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt);
+      .run(projectId, id.keyName, id.provider, account ?? null, workspace ?? null, projects, id.valid ? 1 : 0, id.error ?? null, id.checkedAt);
   }
 }
 
