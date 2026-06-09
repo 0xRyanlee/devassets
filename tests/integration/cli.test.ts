@@ -56,6 +56,16 @@ describe('CLI: add-project', () => {
     expect(status).toBe(0);
     expect(stdout).toContain('Updated project');
   });
+
+  it('creates a command-safe id from a name with leading punctuation', () => {
+    const added = cli(`add-project _legacy_computertw --path=${PROJECT_PATH}`);
+    expect(added.status).toBe(0);
+    expect(added.stdout).toContain('legacy-computertw');
+
+    const scanned = cli('scan legacy-computertw --json');
+    expect(scanned.status).toBe(0);
+    expect(JSON.parse(scanned.stdout).projectId).toBe('legacy-computertw');
+  });
 });
 
 describe('CLI: scan', () => {

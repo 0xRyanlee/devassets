@@ -12,6 +12,7 @@ import { serveCommand } from './commands/serve.js';
 import { doctorCommand } from './commands/doctor.js';
 import { installSkillsCommand } from './commands/install-skills.js';
 import { identityCommand } from './commands/identity.js';
+import { portfolioCommand } from './commands/portfolio.js';
 
 const program = new Command();
 
@@ -30,6 +31,7 @@ program
   .description('Register a project with DevAssets')
   .option('--path <path>', 'Path to project directory (default: ./<name>)')
   .option('--type <type>', 'Project type: saas | mobile | desktop | library | other', 'other')
+  .option('--id <id>', 'Explicit project ID (overrides auto-derived slug)')
   .action(addProjectCommand);
 
 program
@@ -112,5 +114,13 @@ program
   .option('--force', 'Overwrite already-installed skills')
   .option('--list', 'List available skills and their install status')
   .action(installSkillsCommand);
+
+program
+  .command('portfolio')
+  .description('Generate an Astoria project portfolio report')
+  .option('--root <path>', 'Projects root', '/Volumes/Astoria/Projects')
+  .option('--overview <path>', 'Overview project root', '/Volumes/Astoria/Projects/overview')
+  .option('--no-github', 'Skip GitHub repository and workflow queries')
+  .action(portfolioCommand);
 
 export { program };
