@@ -177,7 +177,10 @@ program
   .option('--keys <keys>', 'Comma-separated list of keys to inject (default: all)', (v) => v.split(','))
   .allowUnknownOption()
   .action((projectId: string, options: { env?: string; keys?: string[] }, cmd) => {
-    const args = cmd.args.slice(1);
+    // cmd.args are the unparsed tokens after the positional argument.
+    // commander strips '--' separator; drop it if present for robustness.
+    const raw: string[] = cmd.args as string[];
+    const args = raw[0] === '--' ? raw.slice(1) : raw;
     runCommand(projectId, args, options);
   });
 

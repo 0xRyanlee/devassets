@@ -2,7 +2,8 @@ import type { PaymentStatus, WebhookStatus, RiskItem } from '../types/index.js';
 
 interface PaddleWebhook {
   url: string;
-  status: string;
+  active: boolean;
+  status?: string;
   last_delivery?: string;
   failures_7d?: number;
 }
@@ -22,7 +23,7 @@ export async function checkPaddleStatus(projectId: string, apiKey?: string): Pro
   }
 
   try {
-    const response = await fetch('https://api.paddle.com/webhooks', {
+    const response = await fetch('https://api.paddle.com/notification-settings', {
       headers: { 'Authorization': `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(5000),
     });
@@ -70,7 +71,7 @@ function buildWebhookStatus(webhook?: PaddleWebhook): WebhookStatus {
   if (!webhook) return { registered: false, verified: false, lastDelivery: null, failures7d: 0 };
   return {
     registered: true,
-    verified: webhook.status === 'active',
+    verified: webhook.active === true || webhook.status === 'active',
     lastDelivery: webhook.last_delivery ?? null,
     failures7d: webhook.failures_7d ?? 0,
     url: webhook.url,

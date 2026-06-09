@@ -208,24 +208,26 @@ export function setVaultSecret(
   const db = getDb();
   const { ciphertext, iv, authTag } = encryptVault(plaintext);
   const now = new Date().toISOString();
-  const existing = db.prepare('SELECT id FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
-
-  if (existing) {
-    db.prepare(
-      'UPDATE secret_values SET encrypted_value=?, iv=?, auth_tag=?, provider=?, account_hint=?, workspace_hint=?, updated_at=? WHERE project_id=? AND env=? AND key=?',
-    ).run(ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, now, projectId, env, key);
-  } else {
-    db.prepare(
-      'INSERT INTO secret_values (id, project_id, env, key, encrypted_value, iv, auth_tag, provider, account_hint, workspace_hint, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-    ).run(randomUUID(), projectId, env, key, ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, now, now);
-  }
+  // Single atomic upsert — avoids SELECT+INSERT/UPDATE race condition under parallel invocations
+  db.prepare(
+    `INSERT INTO secret_values (id, project_id, env, key, encrypted_value, iv, auth_tag, provider, account_hint, workspace_hint, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(project_id, env, key) DO UPDATE SET
+       encrypted_value=excluded.encrypted_value, iv=excluded.iv, auth_tag=excluded.auth_tag,
+       provider=excluded.provider, account_hint=excluded.account_hint, workspace_hint=excluded.workspace_hint,
+       updated_at=excluded.updated_at`,
+  ).run(randomUUID(), projectId, env, key, ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, now, now);
 }
 
 export function getVaultSecret(projectId: string, env: string, key: string): string | undefined {
   const db = getDb();
   const r = db.prepare('SELECT encrypted_value, iv, auth_tag FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
   if (!r) return undefined;
-  return decryptVault(r['encrypted_value'] as string, r['iv'] as string, r['auth_tag'] as string);
+  try {
+    return decryptVault(r['encrypted_value'] as string, r['iv'] as string, r['auth_tag'] as string);
+  } catch {
+    throw new Error(`Decryption failed for ${key} [${env}]. The vault key may have changed. Re-store with: devassets set ${projectId} ${key}`);
+  }
 }
 
 export function listVaultSecrets(projectId: string, env?: string): VaultSecretMeta[] {

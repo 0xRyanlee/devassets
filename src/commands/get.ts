@@ -16,7 +16,13 @@ export function getCommand(projectId: string, key: string, options: GetOptions) 
   }
 
   const env = options.env ?? 'local';
-  const value = getVaultSecret(projectId, env, key);
+  let value: string | undefined;
+  try {
+    value = getVaultSecret(projectId, env, key);
+  } catch (err) {
+    logger.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
 
   if (value === undefined) {
     logger.error(`Secret not found: ${key} [${env}]`);

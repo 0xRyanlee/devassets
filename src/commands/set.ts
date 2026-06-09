@@ -22,7 +22,7 @@ export async function setCommand(projectId: string, key: string, value: string |
 
   if (!secretValue) {
     secretValue = await promptSecret(`Enter value for ${key} (${env}): `);
-    if (!secretValue) {
+    if (!secretValue || secretValue.trim() === '') {
       logger.error('No value provided.');
       process.exit(1);
     }
@@ -51,9 +51,10 @@ function promptSecret(prompt: string): Promise<string> {
       process.stdout.write(prompt);
       process.stdin.setRawMode(true);
       process.stdin.resume();
+      // setEncoding ensures multi-byte UTF-8 sequences (CJK, emoji) are assembled correctly
+      process.stdin.setEncoding('utf8');
       let value = '';
-      const handler = (buf: Buffer) => {
-        const char = buf.toString();
+      const handler = (char: string) => {
         if (char === '\r' || char === '\n') {
           process.stdin.setRawMode!(false);
           process.stdin.pause();
@@ -62,9 +63,11 @@ function promptSecret(prompt: string): Promise<string> {
           resolve(value);
         } else if (char === '\x03') {
           process.exit(0);
-        } else if (char === '\x7f') {
+        } else if (char === '\x7f' || char === '\x08') {
+          // backspace / ctrl+H
           value = value.slice(0, -1);
-        } else {
+        } else if (char >= ' ' || char.codePointAt(0)! > 127) {
+          // printable ASCII or any non-ASCII (multi-byte already assembled by setEncoding)
           value += char;
         }
       };
