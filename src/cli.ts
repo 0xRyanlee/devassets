@@ -135,7 +135,7 @@ program
 
 program
   .command('set <project> <key> [value]')
-  .description('Store an encrypted secret value for a project')
+  .description('Store an encrypted secret value for a project (use _global as project for account-level credentials)')
   .option('--env <env>', 'Environment (default: local)')
   .option('--provider <provider>', 'Provider hint (e.g. vercel, supabase)')
   .option('--account <account>', 'Account/email hint')
@@ -143,14 +143,14 @@ program
 
 program
   .command('get <project> <key>')
-  .description('Retrieve a secret value (prints to stdout)')
+  .description('Retrieve a secret value (use _global as project for account-level credentials)')
   .option('--env <env>', 'Environment (default: local)')
   .option('--raw', 'No trailing newline (safe for subshell capture)')
   .action(getCommand);
 
 program
   .command('list <project>')
-  .description('List stored secret keys and metadata (values never shown)')
+  .description('List stored secret keys and metadata — use _global to show account-level credentials')
   .option('--env <env>', 'Filter by environment')
   .option('--json', 'Output JSON')
   .action(listCommand);

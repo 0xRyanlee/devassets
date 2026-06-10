@@ -23,11 +23,15 @@ export function listCommand(projectId: string, options: ListOptions) {
 
   if (secrets.length === 0) {
     logger.info(`No secrets stored for ${project.name}${options.env ? ` [${options.env}]` : ''}`);
-    logger.raw(`  Run: devassets set ${projectId} <KEY> to add one`);
+    const hint = projectId === '_global' ? 'devassets set _global <KEY>' : `devassets set ${projectId} <KEY>`;
+    logger.raw(`  Run: ${hint} to add one`);
     return;
   }
 
-  logger.raw(`\nSecrets for ${project.name}${options.env ? ` [${options.env}]` : ''}\n`);
+  const header = projectId === '_global'
+    ? `\nGlobal Credentials (account-level)${options.env ? ` [${options.env}]` : ''}\n`
+    : `\nSecrets for ${project.name}${options.env ? ` [${options.env}]` : ''}\n`;
+  logger.raw(header);
 
   const byEnv = new Map<string, typeof secrets>();
   for (const s of secrets) {
