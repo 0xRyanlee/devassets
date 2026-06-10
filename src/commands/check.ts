@@ -1,4 +1,4 @@
-import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
@@ -37,15 +37,32 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     let result = validateAssets(assets, projectId, options.env, project.type);
 
     const paymentStatuses: PaymentStatus[] = [];
+    const vaultEnv = options.env ?? 'production';
     for (const platform of platforms) {
       sp.text = `Checking ${platform.name} status…`;
       if (platform.name === 'paddle') {
-        const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
+        const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY')
+          || process.env.PADDLE_API_KEY
+          || getVaultSecretFallback(projectId, vaultEnv, 'PADDLE_API_KEY')?.value;
         paymentStatuses.push(await checkPaddleStatus(projectId, key));
       } else if (platform.name === 'stripe') {
-        const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
+        const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY')
+          || process.env.STRIPE_SECRET_KEY
+          || getVaultSecretFallback(projectId, vaultEnv, 'STRIPE_SECRET_KEY')?.value;
         paymentStatuses.push(await checkStripeStatus(projectId, key));
       }
+    }
+
+    // Annotate missing assets with vault matches so agents can locate credentials
+    const vaultHints: Record<string, string> = {};
+    for (const asset of result.categories.environmentVariables.filter(a => a.status === 'missing')) {
+      const matches = findSecretAcrossProjects(asset.name);
+      if (matches.length > 0) {
+        vaultHints[asset.name] = matches.map(m => `vault:${m.projectId}[${m.env}]`).join(', ');
+      }
+    }
+    if (Object.keys(vaultHints).length > 0) {
+      (result as unknown as Record<string, unknown>).vaultHints = vaultHints;
     }
 
     if (paymentStatuses.length > 0) {

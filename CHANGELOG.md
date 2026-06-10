@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0 — 2026-06-10
+
+### `status` command + web UI removed from bundle
+
+**New command: `devassets status`**
+Compact single-line-per-project table showing vault secrets (by env), asset health
+(total vars · missing count), identity status (pinned / mismatch / invalid), and
+last scan age. Colour-coded with chalk. Attention section lists actionable hints per
+problem project. `--json` for machine-readable output.
+
+**Web UI removed from npm package**
+`express`, `cors`, and `open` removed from production dependencies. `ui/dist/` removed
+from `files` whitelist. The `ui` command is removed from the CLI. Web UI source stays
+in the repo and can be built locally (`npm run build:ui`) for those who want it.
+Package size reduced by ~424 kB (ui/dist/) plus removed runtime deps.
+
+110 tests pass.
+
+---
+
 ## 0.9.0 — 2026-06-10
 
 ### Phase 1 Vault — local-first encrypted secrets manager

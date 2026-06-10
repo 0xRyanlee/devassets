@@ -7,12 +7,12 @@ import { exportCommand } from './commands/export.js';
 import { verifyCommand } from './commands/verify.js';
 import { rotateCommand } from './commands/rotate.js';
 import { auditCommand } from './commands/audit.js';
-import { uiCommand } from './commands/ui.js';
 import { serveCommand } from './commands/serve.js';
 import { doctorCommand } from './commands/doctor.js';
 import { installSkillsCommand } from './commands/install-skills.js';
 import { identityCommand } from './commands/identity.js';
 import { portfolioCommand } from './commands/portfolio.js';
+import { statusCommand } from './commands/status.js';
 import { setCommand } from './commands/set.js';
 import { getCommand } from './commands/get.js';
 import { listCommand } from './commands/list.js';
@@ -26,6 +26,12 @@ program
   .name('devassets')
   .description('Developer asset management for independent developers')
   .version('0.9.0');
+
+program
+  .command('status')
+  .description('Overview of all projects — vault secrets, asset health, identity, last scan')
+  .option('--json', 'Output JSON')
+  .action(statusCommand);
 
 program
   .command('init')
@@ -88,13 +94,6 @@ program
   .option('--action <action>', 'Filter by action type')
   .option('--format <format>', 'Output format: human | json', 'human')
   .action(auditCommand);
-
-program
-  .command('ui')
-  .description('Start the DevAssets web dashboard')
-  .option('--port <port>', 'Port to listen on', String(9090))
-  .option('--no-open', 'Do not auto-open browser')
-  .action(uiCommand);
 
 program
   .command('serve')

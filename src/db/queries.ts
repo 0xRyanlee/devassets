@@ -250,3 +250,50 @@ export function deleteVaultSecret(projectId: string, env: string, key: string): 
   const result = db.prepare('DELETE FROM secret_values WHERE project_id=? AND env=? AND key=?').run(projectId, env, key);
   return (result as { changes: number }).changes > 0;
 }
+
+// Search across ALL projects' vaults by key name — returns metadata only, never plaintext values.
+export function findSecretAcrossProjects(key: string, env?: string): Array<VaultSecretMeta & { projectId: string }> {
+  const db = getDb();
+  const rows = env
+    ? (db.prepare('SELECT project_id, key, env, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? AND env=? ORDER BY project_id, env').all(key, env) as Row[])
+    : (db.prepare('SELECT project_id, key, env, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? ORDER BY project_id, env').all(key) as Row[]);
+  return rows.map(r => ({
+    projectId: r['project_id'] as string,
+    key: r['key'] as string,
+    env: r['env'] as string,
+    provider: (r['provider'] as string) ?? undefined,
+    accountHint: (r['account_hint'] as string) ?? undefined,
+    workspaceHint: (r['workspace_hint'] as string) ?? undefined,
+    updatedAt: r['updated_at'] as string,
+  }));
+}
+
+// Get a vault secret, falling back to other projects' vaults if not found in the primary project.
+// Searches primary project first, then all other projects in vault order.
+export function getVaultSecretFallback(
+  primaryProjectId: string,
+  env: string,
+  key: string,
+): { value: string; sourceProject: string } | undefined {
+  const own = getVaultSecret(primaryProjectId, env, key);
+  if (own !== undefined) return { value: own, sourceProject: primaryProjectId };
+
+  const matches = findSecretAcrossProjects(key, env);
+  for (const match of matches) {
+    if (match.projectId === primaryProjectId) continue;
+    try {
+      const v = getVaultSecret(match.projectId, env, key);
+      if (v !== undefined) return { value: v, sourceProject: match.projectId };
+    } catch {
+      // Vault key mismatch on another project entry — skip silently
+    }
+  }
+  return undefined;
+}
+
+// Return count of vault secrets per project (no values), used for doctor summary.
+export function getVaultSecretCounts(): Record<string, number> {
+  const db = getDb();
+  const rows = db.prepare('SELECT project_id, COUNT(*) as cnt FROM secret_values GROUP BY project_id').all() as Row[];
+  return Object.fromEntries(rows.map(r => [r['project_id'] as string, r['cnt'] as number]));
+}
