@@ -109,6 +109,10 @@ devassets scan myapp
 devassets set myapp DATABASE_URL          # prompts with hidden input
 devassets set myapp STRIPE_SECRET_KEY sk_live_… --provider=stripe
 
+# 4b. Store account-level credentials once (shared across all projects)
+devassets set _global VERCEL_TOKEN --provider=vercel
+devassets set _global ANTHROPIC_API_KEY --provider=anthropic
+
 # 5. Check deploy-readiness
 devassets check myapp --env=production
 
@@ -130,12 +134,36 @@ devassets doctor
 
 | Command | Description |
 |---|---|
-| `devassets set <project> <key> [value]` | Encrypt and store a secret value (prompts if value omitted) |
+| `devassets set <project> <key> [value]` | Encrypt and store a project-scoped secret (prompts if value omitted) |
+| `devassets set _global <key> [value]` | Store an account-level credential shared across all projects |
 | `devassets get <project> <key>` | Decrypt and print a value; `--raw` skips trailing newline |
+| `devassets get _global <key>` | Retrieve a global credential |
 | `devassets list <project>` | List stored key names and metadata — **values never shown** |
+| `devassets list _global` | List all account-level credentials |
 | `devassets unset <project> <key>` | Delete a stored secret |
 | `devassets inject <project>` | Load secrets into shell env; `--print` outputs `export` statements |
 | `devassets run <project> -- <cmd>` | Run a command with secrets injected |
+
+#### Global credentials (`_global` scope)
+
+Some credentials belong to your account, not a specific project: `VERCEL_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN`. Store them once under the reserved `_global` project and they become accessible from any project.
+
+```bash
+# Store once — no project context needed
+devassets set _global VERCEL_TOKEN --provider=vercel --account=you@example.com
+devassets set _global ANTHROPIC_API_KEY --provider=anthropic
+devassets set _global GITHUB_TOKEN --provider=github
+
+# Read from any project context
+devassets get _global VERCEL_TOKEN
+
+# List all account-level credentials
+devassets list _global
+```
+
+When you call `devassets get <project> <key>` for a project-specific key and it's not found, DevAssets automatically checks `_global` before falling back to other projects. The response includes `scope: "global"` or `scope: "project"` so you know where it came from.
+
+> `_global` is a reserved project ID — `devassets add-project` will reject it.
 
 ### Credential management
 
@@ -235,10 +263,29 @@ Use DevAssets as an MCP server so your AI agent can query credential health and 
 }
 ```
 
-Available MCP tools: `devassets_list_projects`, `devassets_check`, `devassets_scan`, `devassets_identity`, `devassets_export`, `devassets_health`, `devassets_doctor`, `devassets_audit`, `devassets_rotate`, `devassets_add_project`, `devassets_ci_snippet`, `devassets_skills`
+Available MCP tools:
+
+**Project health & scanning**
+`devassets_list_projects` · `devassets_check` · `devassets_scan` · `devassets_health` · `devassets_doctor`
+
+**Credential management**
+`devassets_identity` · `devassets_rotate` · `devassets_audit` · `devassets_export` · `devassets_add_project`
+
+**Vault — secret retrieval (agent routing)**
+| Tool | When to use |
+|---|---|
+| `devassets_get_global_secret(key, env)` | Account-level credentials: `VERCEL_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN` |
+| `devassets_set_global_secret(key, value, env)` | Store an account-level credential (once, shared across all projects) |
+| `devassets_get_secret(project, key, env)` | Project-specific credentials: `DATABASE_URL`, `PADDLE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `devassets_list_secrets(project, env, scope)` | List keys; use `project="_global"` or `scope="global"` for account-level |
+| `devassets_find_secret(key, env, scope)` | Discover where a key is stored; `scope` filter narrows to global or project |
+
+**Tooling**
+`devassets_ci_snippet` · `devassets_skills`
 
 > *"Check all my projects and tell me which ones have missing production secrets."*
-> *"Resolve the accounts for all tokens in company-app and flag any mismatches."*
+> *"Get the VERCEL_TOKEN for this deploy."* → routes to `devassets_get_global_secret`
+> *"What account does this SUPABASE_SERVICE_ROLE_KEY belong to?"* → `devassets_identity`
 
 **Claude Code skills** (`devassets install-skills`): installs `/devassets-check` and `/devassets-ci` slash commands locally.
 

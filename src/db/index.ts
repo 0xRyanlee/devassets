@@ -34,6 +34,10 @@ function runMigrations(db: DatabaseSync) {
       updated_at TEXT NOT NULL
     );
 
+    -- Reserved virtual project for account-level global credentials
+    INSERT OR IGNORE INTO projects (id, name, path, type, created_at, updated_at)
+    VALUES ('_global', 'Global Credentials', '~/.devassets', 'other', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+
     CREATE TABLE IF NOT EXISTS assets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       project_id TEXT NOT NULL,
@@ -104,4 +108,11 @@ function runMigrations(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_secret_values_project ON secret_values(project_id);
   `);
+
+  // Idempotent column addition — scope distinguishes global (account-level) vs project-scoped secrets
+  try {
+    db.exec(`ALTER TABLE secret_values ADD COLUMN scope TEXT NOT NULL DEFAULT 'project'`);
+  } catch {
+    // column already exists
+  }
 }

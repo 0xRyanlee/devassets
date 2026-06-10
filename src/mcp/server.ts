@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser, listVaultSecrets, getVaultSecret, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser, listVaultSecrets, getVaultSecret, setVaultSecret, getGlobalSecret, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { readProjectEnvValue } from '../core/roots.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
@@ -231,6 +231,9 @@ export async function startMcpServer() {
       type: z.enum(['saas', 'mobile', 'desktop', 'library', 'other']).optional().describe('Project type'),
     },
     async ({ id, name, path: projectPath, type = 'other' }) => {
+      if (id === '_global') {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: `"_global" is a reserved project ID for account-level credentials. Use devassets_set_global_secret to store global keys.` }) }] };
+      }
       const { statSync } = await import('fs');
       const resolvedPath = (await import('path')).resolve(projectPath);
       try {
@@ -344,15 +347,19 @@ export async function startMcpServer() {
 
   server.tool(
     'devassets_find_secret',
-    'Search across ALL projects\' vaults for a key name. Returns metadata (project, env, provider, updatedAt) — never plaintext values. Use this to discover where a credential is stored before calling devassets_get_secret.',
+    'Search across ALL projects\' vaults for a key name. Returns metadata (project, env, scope, provider, updatedAt) — never plaintext values. Use scope=global to find only account-level shared credentials; scope=project for project-specific keys.',
     {
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name to search for (e.g. PADDLE_API_KEY)'),
       env: z.string().optional().describe('Filter by environment: local | development | staging | production'),
+      scope: z.enum(['global', 'project']).optional().describe('Filter by scope: global = account-level credentials shared across projects; project = project-specific credentials'),
     },
-    async ({ key, env }) => {
-      const matches = findSecretAcrossProjects(key, env);
+    async ({ key, env, scope }) => {
+      const matches = findSecretAcrossProjects(key, env, scope);
       if (matches.length === 0) {
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, message: `No vault entry found for ${key}${env ? ` [${env}]` : ''}. Use devassets set <project> ${key} to store it.` }) }] };
+        const hint = scope === 'global'
+          ? `Use devassets_set_global_secret to store ${key} as a global credential.`
+          : `Use devassets set <project> ${key} to store it.`;
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, message: `No vault entry found for ${key}${env ? ` [${env}]` : ''}${scope ? ` [scope=${scope}]` : ''}. ${hint}` }) }] };
       }
       return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, matches }) }] };
     }
@@ -360,22 +367,23 @@ export async function startMcpServer() {
 
   server.tool(
     'devassets_list_secrets',
-    'List vault secrets for a project. Returns metadata only (key names, env, provider, updatedAt) — never plaintext values.',
+    'List vault secrets for a project. Returns metadata only (key names, env, scope, provider, updatedAt) — never plaintext values. Use project="_global" or scope="global" to list account-level credentials shared across all projects.',
     {
-      project: z.string().describe('Project ID'),
+      project: z.string().describe('Project ID. Use "_global" to list account-level credentials shared across all projects.'),
       env: z.string().optional().describe('Filter by environment (default: all environments)'),
+      scope: z.enum(['global', 'project']).optional().describe('Filter by scope: global = account-level shared credentials; project = project-specific credentials'),
     },
-    async ({ project: projectId, env }) => {
+    async ({ project: projectId, env, scope }) => {
       const project = getProject(projectId);
       if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
-      const secrets = listVaultSecrets(projectId, env);
+      const secrets = listVaultSecrets(projectId, env, scope);
       return { content: [{ type: 'text', text: JSON.stringify({ project: projectId, count: secrets.length, secrets }) }] };
     }
   );
 
   server.tool(
     'devassets_get_secret',
-    'Retrieve a secret value from the vault. Searches the specified project first, then falls back to other projects\' vaults automatically. Returns the plaintext value and which project it came from.',
+    'Retrieve a project-scoped secret from the vault. Searches the specified project first, then the _global vault, then other projects as fallback. For account-level credentials shared across projects (VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs), prefer devassets_get_global_secret which searches only the global scope.',
     {
       project: z.string().describe('Primary project ID to look up first'),
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. PADDLE_API_KEY)'),
@@ -390,9 +398,53 @@ export async function startMcpServer() {
         return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, message: `${key} not found in any vault for env=${env}. Run: devassets set credentials ${key} --env ${env}` }) }] };
       }
 
-      addAuditLog({ projectId, action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, sourceProject: result.sourceProject, via: 'mcp' }, result: 'success' });
+      addAuditLog({ projectId, action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, sourceProject: result.sourceProject, scope: result.scope, via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value: result.value, sourceProject: result.sourceProject }) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value: result.value, sourceProject: result.sourceProject, scope: result.scope }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_get_global_secret',
+    'Retrieve an account-level credential from the global vault. Use this for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, STRIPE_SECRET_KEY (when shared), etc. Does not require a project context. Returns the plaintext value.',
+    {
+      key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
+      env: z.string().optional().describe('Environment (default: production)'),
+    },
+    async ({ key, env = 'production' }) => {
+      let value: string | undefined;
+      try {
+        value = getGlobalSecret(key, env);
+      } catch (err) {
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, error: err instanceof Error ? err.message : String(err) }) }] };
+      }
+
+      if (!value) {
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', message: `${key} not found in global vault [${env}]. Store it with: devassets set _global ${key} --env ${env}` }) }] };
+      }
+
+      addAuditLog({ projectId: '_global', action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value, scope: 'global', sourceProject: '_global' }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_set_global_secret',
+    'Store an account-level credential in the global vault. Use for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, etc. Does not require a project context. Stored once, accessible from any project via devassets_get_global_secret.',
+    {
+      key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
+      value: z.string().min(1).describe('The secret value to store'),
+      env: z.string().optional().describe('Environment (default: production)'),
+      provider: z.string().optional().describe('Provider hint (e.g. vercel, anthropic, github)'),
+      account: z.string().optional().describe('Account/email hint for identity tracking'),
+    },
+    async ({ key, value, env = 'production', provider, account }) => {
+      setVaultSecret('_global', env, key, value, { provider, account }, 'global');
+
+      addAuditLog({ projectId: '_global', action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ stored: true, key, env, scope: 'global', message: `${key} stored in global vault [${env}]. Accessible via devassets_get_global_secret.` }) }] };
     }
   );
 

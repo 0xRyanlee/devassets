@@ -25,6 +25,12 @@ export function addProjectCommand(name: string, options: AddProjectOptions) {
   }
   const id = computed;
 
+  if (id === '_global') {
+    logger.error('"_global" is a reserved ID for account-level credentials.');
+    logger.raw('  Use: devassets set _global <KEY> to store global credentials');
+    process.exit(1);
+  }
+
   if (!fs.existsSync(projectPath)) {
     logger.warn(`Path does not exist: ${projectPath}`);
     logger.warn('Project will be registered but scanning will fail until the path exists.');
