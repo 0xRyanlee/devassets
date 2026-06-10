@@ -25,7 +25,8 @@ const program = new Command();
 program
   .name('devassets')
   .description('Developer asset management for independent developers')
-  .version('0.9.0');
+  .version('0.10.0')
+  .action(() => statusCommand({}));
 
 program
   .command('status')
