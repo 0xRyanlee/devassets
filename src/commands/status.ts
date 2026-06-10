@@ -25,8 +25,11 @@ export function statusCommand(options: StatusOptions) {
   const projects = listProjects();
 
   if (projects.length === 0) {
-    logger.info('No projects registered.');
-    logger.raw('  Run: devassets add-project <name> --path=<path>');
+    logger.info('No projects registered. Quick start:');
+    logger.raw('  devassets init                             # one-time setup + security notes');
+    logger.raw('  devassets add-project <name> --path=<dir> # register a project');
+    logger.raw('  devassets scan <name>                      # detect env vars');
+    logger.raw('  devassets set <name> <KEY>                 # store secrets encrypted');
     return;
   }
 
@@ -74,7 +77,7 @@ export function statusCommand(options: StatusOptions) {
     const lastSeens = assets.map(a => new Date(a.lastSeen).getTime()).filter(t => !isNaN(t));
     const ago = lastSeens.length === 0 ? '—' : relativeTime(Math.max(...lastSeens));
 
-    const needsAttention = missingCount > 0 || !identityOk || secrets.length === 0 || assets.length === 0;
+    const needsAttention = missingCount > 0 || !identityOk || assets.length === 0;
 
     return {
       id: p.id,
@@ -105,57 +108,59 @@ export function statusCommand(options: StatusOptions) {
     return;
   }
 
-  // Column widths (dynamic)
-  const nameW = Math.max(10, ...rows.map(r => r.name.length)) + 2;
-  const typeW = 8;
-  const vaultW = Math.max(10, ...rows.map(r => r.vault.length)) + 2;
-  const assetsW = Math.max(11, ...rows.map(r => r.assets.length)) + 2;
-  const identityW = Math.max(10, ...rows.map(r => r.identity.length)) + 2;
-  const agoW = 7;
-
-  const totalW = nameW + typeW + vaultW + assetsW + identityW + agoW;
-
-  const header =
-    chalk.bold('PROJECT'.padEnd(nameW)) +
-    chalk.bold('TYPE'.padEnd(typeW)) +
-    chalk.bold('VAULT'.padEnd(vaultW)) +
-    chalk.bold('ASSETS'.padEnd(assetsW)) +
-    chalk.bold('IDENTITY'.padEnd(identityW)) +
-    chalk.bold('SCANNED');
+  // ── Box-drawing helpers (rounded-corner style) ──────────────────────────
+  const cw = {
+    name:     Math.max('PROJECT'.length,  ...rows.map(r => r.name.length))     + 2,
+    type:     Math.max('TYPE'.length,     ...rows.map(r => r.type.length))     + 2,
+    vault:    Math.max('VAULT'.length,    ...rows.map(r => r.vault.length))    + 2,
+    assets:   Math.max('ASSETS'.length,   ...rows.map(r => r.assets.length))   + 2,
+    identity: Math.max('IDENTITY'.length, ...rows.map(r => r.identity.length)) + 2,
+    ago:      Math.max('SCANNED'.length,  7)                                   + 2,
+  };
+  const ws = Object.values(cw);
+  const pad = (s: string, w: number) => ` ${s}`.padEnd(w);
+  const topLine  = () => '╭' + ws.map(w => '─'.repeat(w)).join('┬') + '╮';
+  const midLine  = () => '├' + ws.map(w => '─'.repeat(w)).join('┼') + '┤';
+  const botLine  = () => '╰' + ws.map(w => '─'.repeat(w)).join('┴') + '╯';
+  const rowLine  = (...cells: string[]) => '│' + cells.join('│') + '│';
 
   logger.raw('');
-  logger.raw(header);
-  logger.raw('─'.repeat(totalW));
+  logger.raw(topLine());
+  logger.raw(rowLine(
+    chalk.bold(pad('PROJECT',  cw.name)),
+    chalk.bold(pad('TYPE',     cw.type)),
+    chalk.bold(pad('VAULT',    cw.vault)),
+    chalk.bold(pad('ASSETS',   cw.assets)),
+    chalk.bold(pad('IDENTITY', cw.identity)),
+    chalk.bold(pad('SCANNED',  cw.ago)),
+  ));
+  logger.raw(midLine());
 
   for (const r of rows) {
-    const name = r.needsAttention
-      ? chalk.yellow(r.name.padEnd(nameW))
-      : r.name.padEnd(nameW);
+    const namePlain     = pad(r.name,     cw.name);
+    const typePlain     = pad(r.type,     cw.type);
+    const vaultPlain    = pad(r.vault,    cw.vault);
+    const assetsPlain   = pad(r.assets,   cw.assets);
+    const identityPlain = pad(r.identity, cw.identity);
+    const agoPlain      = pad(r.ago,      cw.ago);
 
-    const type = chalk.dim(r.type.padEnd(typeW));
-
-    const vault = r.vaultCount === 0
-      ? chalk.dim(r.vault.padEnd(vaultW))
-      : chalk.cyan(r.vault.padEnd(vaultW));
-
-    const assets = r.assets === 'unscanned'
-      ? chalk.dim(r.assets.padEnd(assetsW))
-      : r.assetMissing > 0
-        ? chalk.yellow(r.assets.padEnd(assetsW))
-        : chalk.green(r.assets.padEnd(assetsW));
-
-    const identity = r.identity === '—'
-      ? chalk.dim(r.identity.padEnd(identityW))
+    const nameC = r.needsAttention ? chalk.yellow(namePlain) : namePlain;
+    const typeC = chalk.dim(typePlain);
+    const vaultC = r.vaultCount === 0 ? chalk.dim(vaultPlain) : chalk.cyan(vaultPlain);
+    const assetsC = r.assets === 'unscanned'
+      ? chalk.dim(assetsPlain)
+      : r.assetMissing > 0 ? chalk.yellow(assetsPlain) : chalk.green(assetsPlain);
+    const identityC = r.identity === '—'
+      ? chalk.dim(identityPlain)
       : r.identityOk
-        ? (r.identity.startsWith('✓') ? chalk.green(r.identity.padEnd(identityW)) : chalk.dim(r.identity.padEnd(identityW)))
-        : chalk.yellow(r.identity.padEnd(identityW));
+        ? (r.identity.startsWith('✓') ? chalk.green(identityPlain) : chalk.dim(identityPlain))
+        : chalk.yellow(identityPlain);
+    const agoC = chalk.dim(agoPlain);
 
-    const ago = chalk.dim(r.ago.padEnd(agoW));
-
-    logger.raw(name + type + vault + assets + identity + ago);
+    logger.raw(rowLine(nameC, typeC, vaultC, assetsC, identityC, agoC));
   }
 
-  logger.raw('─'.repeat(totalW));
+  logger.raw(botLine());
 
   // Summary line
   const total = rows.length;
@@ -164,7 +169,7 @@ export function statusCommand(options: StatusOptions) {
   const mismatches = rows.filter(r => !r.identityOk).length;
   const unscanned = rows.filter(r => r.assets === 'unscanned').length;
 
-  let summary = `${total} project${total !== 1 ? 's' : ''} · ${totalSecrets} secret${totalSecrets !== 1 ? 's' : ''}`;
+  let summary = `  ${total} project${total !== 1 ? 's' : ''} · ${totalSecrets} secret${totalSecrets !== 1 ? 's' : ''}`;
   if (unscanned > 0) summary += ` · ${chalk.dim(`${unscanned} unscanned`)}`;
   if (warnings > 0) summary += ` · ${chalk.yellow(`${warnings} ⚠ asset warning${warnings !== 1 ? 's' : ''}`)}`;
   if (mismatches > 0) summary += ` · ${chalk.yellow(`${mismatches} ⚠ identity issue${mismatches !== 1 ? 's' : ''}`)}`;
@@ -172,16 +177,50 @@ export function statusCommand(options: StatusOptions) {
 
   const attention = rows.filter(r => r.needsAttention);
   if (attention.length > 0) {
-    logger.raw('');
-    logger.raw(chalk.dim('Needs attention:'));
+    interface IssueRow { project: string; issue: string; why: string; action: string; }
+    const issueRows: IssueRow[] = [];
     for (const r of attention) {
-      const hints: string[] = [];
-      if (r.assets === 'unscanned') hints.push(`devassets scan ${r.id}`);
-      else if (r.assetMissing > 0) hints.push(`devassets check ${r.id}`);
-      if (!r.identityOk) hints.push(`devassets identity ${r.id}`);
-      if (r.vaultCount === 0 && r.assets !== 'unscanned') hints.push(`devassets set ${r.id} <KEY>`);
-      logger.raw(`  ${chalk.yellow(r.name.padEnd(nameW - 2))}  ${hints.join('  ·  ')}`);
+      if (r.assets === 'unscanned') {
+        issueRows.push({ project: r.name, issue: 'unscanned', why: 'scan never run', action: `devassets scan ${r.id}` });
+      } else if (r.assetMissing > 0) {
+        issueRows.push({ project: r.name, issue: `${r.assetMissing} missing secret${r.assetMissing > 1 ? 's' : ''}`, why: 'in .env.example but not in .env', action: `devassets check ${r.id}` });
+      }
+      if (!r.identityOk) {
+        const why = r.identity.startsWith('⚠') ? 'token belongs to wrong account' : 'token expired or revoked';
+        issueRows.push({ project: r.name, issue: r.identity.trim(), why, action: `devassets identity ${r.id}` });
+      }
     }
+
+    const acw = {
+      project: Math.max('PROJECT'.length, ...issueRows.map(r => r.project.length)) + 2,
+      issue:   Math.max('ISSUE'.length,   ...issueRows.map(r => r.issue.length))   + 2,
+      why:     Math.max('WHY'.length,     ...issueRows.map(r => r.why.length))     + 2,
+      action:  Math.max('ACTION'.length,  ...issueRows.map(r => r.action.length))  + 2,
+    };
+    const aws = Object.values(acw);
+    const atop = () => '╭' + aws.map(w => '─'.repeat(w)).join('┬') + '╮';
+    const amid = () => '├' + aws.map(w => '─'.repeat(w)).join('┼') + '┤';
+    const abot = () => '╰' + aws.map(w => '─'.repeat(w)).join('┴') + '╯';
+    const arow = (...cells: string[]) => '│' + cells.join('│') + '│';
+
+    logger.raw('');
+    logger.raw(atop());
+    logger.raw(arow(
+      chalk.bold(pad('PROJECT', acw.project)),
+      chalk.bold(pad('ISSUE',   acw.issue)),
+      chalk.bold(pad('WHY',     acw.why)),
+      chalk.bold(pad('ACTION',  acw.action)),
+    ));
+    logger.raw(amid());
+    for (const ir of issueRows) {
+      logger.raw(arow(
+        chalk.yellow(pad(ir.project, acw.project)),
+        chalk.yellow(pad(ir.issue,   acw.issue)),
+        chalk.dim(pad(ir.why,        acw.why)),
+        chalk.cyan(pad(ir.action,    acw.action)),
+      ));
+    }
+    logger.raw(abot());
   }
   logger.raw('');
 }
