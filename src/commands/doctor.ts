@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import fs from 'fs';
 import { Listr } from 'listr2';
-import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser } from '../db/queries.js';
+import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser, getVaultSecretCounts } from '../db/queries.js';
 import { validateAssets } from '../core/validator.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
@@ -31,6 +31,7 @@ interface ProjectHealth {
   assetCount: number;
   missingCount: number;
   riskCount: number;
+  vaultSecretCount: number;
   lastScanned?: string;
 }
 
@@ -114,6 +115,7 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
   const now = new Date().toISOString();
   const projectHealths: ProjectHealth[] = [];
   const topRisks: TopRisk[] = [];
+  const vaultCounts = getVaultSecretCounts();
 
   for (const project of projects) {
     const assets = getAssets(project.id);
@@ -127,6 +129,7 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
       assetCount: result.assets.total,
       missingCount: result.assets.missing,
       riskCount: result.risks.length,
+      vaultSecretCount: vaultCounts[project.id] ?? 0,
       lastScanned: lastLog?.timestamp,
     });
 
@@ -186,7 +189,8 @@ function printDoctorReport(report: DoctorReport) {
     const assets = chalk.gray(`${p.assetCount} assets`);
     const missing = p.missingCount > 0 ? chalk.red(` · ${p.missingCount} missing`) : '';
     const risks = p.riskCount > 0 ? chalk.yellow(` · ${p.riskCount} risks`) : '';
-    console.log(`  ${icon} ${p.id.padEnd(20)} ${assets}${missing}${risks}`);
+    const vault = p.vaultSecretCount > 0 ? chalk.cyan(` · ${p.vaultSecretCount} vault`) : '';
+    console.log(`  ${icon} ${p.id.padEnd(20)} ${assets}${missing}${risks}${vault}`);
   }
   console.log('');
 

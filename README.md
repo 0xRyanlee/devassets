@@ -159,6 +159,7 @@ devassets doctor
 | `devassets portfolio` | Point-in-time snapshot of all projects under a root |
 | `devassets ui` | Start web dashboard at localhost:9090 |
 | `devassets serve` | Start MCP server (stdio) for Claude Code / Cursor |
+| `devassets status` | Compact overview of all projects — vault, assets, identity, age |
 | `devassets install-skills` | Install Claude Code slash commands |
 
 ---
@@ -243,13 +244,19 @@ Available MCP tools: `devassets_list_projects`, `devassets_check`, `devassets_sc
 
 ---
 
-## Web Dashboard
+## Web Dashboard (optional, not bundled)
+
+The web UI is intentionally excluded from the npm package to keep the CLI lean. If you want a browser-based view, build it locally from source:
 
 ```bash
-devassets ui   # opens http://localhost:9090
+git clone https://github.com/0xRyanlee/devassets
+cd devassets && npm install
+npm run build:ui        # builds ui/dist/
+npm run build           # builds CLI
+node dist/index.js serve  # MCP mode, or add your own ui server
 ```
 
-Per-project view: asset table, missing-key risks, payment platform status, and a Credential Identities panel with account/workspace/mismatch warnings.
+For day-to-day use, `devassets status` gives a full terminal overview without a browser.
 
 ---
 

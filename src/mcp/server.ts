@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser, listVaultSecrets, getVaultSecret, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { readProjectEnvValue } from '../core/roots.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
@@ -13,7 +13,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.8.1',
+    version: '0.9.0',
   });
 
   server.tool(
@@ -47,16 +47,33 @@ export async function startMcpServer() {
 
       const platforms = getPaymentPlatforms(projectId);
       const paymentStatuses = [];
+      const vaultEnv = environment ?? 'production';
       for (const p of platforms) {
         if (p.name === 'paddle') {
-          const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY') || process.env.PADDLE_API_KEY;
+          const key = readProjectEnvValue(project.path, 'PADDLE_API_KEY')
+            || process.env.PADDLE_API_KEY
+            || getVaultSecretFallback(projectId, vaultEnv, 'PADDLE_API_KEY')?.value;
           paymentStatuses.push(await checkPaddleStatus(projectId, key));
         } else if (p.name === 'stripe') {
-          const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY') || process.env.STRIPE_SECRET_KEY;
+          const key = readProjectEnvValue(project.path, 'STRIPE_SECRET_KEY')
+            || process.env.STRIPE_SECRET_KEY
+            || getVaultSecretFallback(projectId, vaultEnv, 'STRIPE_SECRET_KEY')?.value;
           paymentStatuses.push(await checkStripeStatus(projectId, key));
         }
       }
       if (paymentStatuses.length > 0) result = mergePaymentRisks(result, paymentStatuses);
+
+      // Annotate missing assets with vault location hints for agent discoverability
+      const vaultHints: Record<string, string> = {};
+      for (const asset of result.categories.environmentVariables.filter(a => a.status === 'missing')) {
+        const matches = findSecretAcrossProjects(asset.name);
+        if (matches.length > 0) {
+          vaultHints[asset.name] = matches.map(m => `vault:${m.projectId}[${m.env}]`).join(', ');
+        }
+      }
+      if (Object.keys(vaultHints).length > 0) {
+        (result as unknown as Record<string, unknown>).vaultHints = vaultHints;
+      }
 
       addAuditLog({ projectId, action: 'check', user: getCurrentUser(), timestamp: result.timestamp, details: { environment, via: 'mcp' }, result: 'success' });
 
@@ -322,6 +339,60 @@ export async function startMcpServer() {
         : { [skill]: readSkillContent(skill) };
       const installPath = `${process.env.HOME}/.claude/commands/`;
       return { content: [{ type: 'text', text: JSON.stringify({ installPath, skills, installCommand: 'devassets install-skills' }, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_find_secret',
+    'Search across ALL projects\' vaults for a key name. Returns metadata (project, env, provider, updatedAt) — never plaintext values. Use this to discover where a credential is stored before calling devassets_get_secret.',
+    {
+      key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name to search for (e.g. PADDLE_API_KEY)'),
+      env: z.string().optional().describe('Filter by environment: local | development | staging | production'),
+    },
+    async ({ key, env }) => {
+      const matches = findSecretAcrossProjects(key, env);
+      if (matches.length === 0) {
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, message: `No vault entry found for ${key}${env ? ` [${env}]` : ''}. Use devassets set <project> ${key} to store it.` }) }] };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, matches }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_list_secrets',
+    'List vault secrets for a project. Returns metadata only (key names, env, provider, updatedAt) — never plaintext values.',
+    {
+      project: z.string().describe('Project ID'),
+      env: z.string().optional().describe('Filter by environment (default: all environments)'),
+    },
+    async ({ project: projectId, env }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      const secrets = listVaultSecrets(projectId, env);
+      return { content: [{ type: 'text', text: JSON.stringify({ project: projectId, count: secrets.length, secrets }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_get_secret',
+    'Retrieve a secret value from the vault. Searches the specified project first, then falls back to other projects\' vaults automatically. Returns the plaintext value and which project it came from.',
+    {
+      project: z.string().describe('Primary project ID to look up first'),
+      key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. PADDLE_API_KEY)'),
+      env: z.string().optional().describe('Environment (default: production)'),
+    },
+    async ({ project: projectId, key, env = 'production' }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+
+      const result = getVaultSecretFallback(projectId, env, key);
+      if (!result) {
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, message: `${key} not found in any vault for env=${env}. Run: devassets set credentials ${key} --env ${env}` }) }] };
+      }
+
+      addAuditLog({ projectId, action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, sourceProject: result.sourceProject, via: 'mcp' }, result: 'success' });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value: result.value, sourceProject: result.sourceProject }) }] };
     }
   );
 
