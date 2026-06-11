@@ -8,6 +8,8 @@ Store your API keys and env vars encrypted on your machine. Manage them across 1
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.5.0-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**Free & open source. MIT license. No subscription. No cloud. No account. No telemetry.**
+
 ```bash
 npm install -g @hyphen-network/devassets
 ```
@@ -90,6 +92,52 @@ Every `get`, `set`, `rotate`, and `inject` is logged with timestamp and key name
 | Onboarding a 6-month-old project | Cross-check every service manually | `scan` + `identity` maps it in seconds |
 | "Did I rotate that key?" | Search Slack / memory | `audit` shows every rotation with timestamp |
 | Share deploy checklist | Paste secrets in chat (unsafe) | `export --encrypt` — signed, encrypted, names-only |
+
+---
+
+## Who Is DevAssets For?
+
+**Independent developers and small teams managing 5–20+ projects.** If you are a solo founder, freelancer, or indie dev who:
+
+- Maintains multiple SaaS projects, side projects, and client work simultaneously
+- Has accumulated dozens of API keys across Vercel, Supabase, Neon, Stripe, Paddle, GCP, LLM providers
+- Uses AI coding tools (Claude Code, Cursor, Copilot) and wants your agent to reason about credential state
+- Wants the security guarantees of a vault without the cost and complexity of a cloud secrets manager
+
+DevAssets is **not** designed for:
+- Centrally-managed enterprise credential rotation (use HashiCorp Vault or AWS Secrets Manager)
+- Shared team vaults with SSO/SCIM (use 1Password Teams or Doppler)
+
+---
+
+## DevAssets vs. Alternatives
+
+Most secrets tools are either cloud-based (Doppler, 1Password) or offer no security at all (direnv, plain `.env`). DevAssets occupies a different position: **fully local + identity-aware + AI-native**.
+
+| | DevAssets | 1Password CLI | Doppler | direnv | Infisical |
+|---|---|---|---|---|---|
+| Storage | Local SQLite | Cloud vault | Cloud | `.envrc` files | Cloud / self-hosted |
+| Encryption | AES-256-GCM per value | AES-256 | AES-256 | **None** | AES-256 |
+| Account required | **No** | Yes | Yes | No | Yes |
+| Monthly cost | **Free** | $3–8/user | $0–10+/project | Free | Free OSS |
+| Identity resolution | **✓ (unique)** | ✗ | ✗ | ✗ | ✗ |
+| Multi-project health | **✓** | ✗ | Partial | ✗ | Partial |
+| AI agent / MCP | **Native** | ✗ | ✗ | ✗ | ✗ |
+| Telemetry | **Zero** | Vendor | Vendor | Zero | Vendor |
+
+**Identity resolution** (`devassets identity`) is unique in this category. No other tool asks "which account and workspace does this token actually belong to?" — and warns when it drifts. This catches the silent class of incident where a staging token was used in production, or a personal token was used on a company workspace.
+
+**MCP integration** means your AI coding agent can check credential health, retrieve secrets, and detect missing keys — without you ever switching context to a terminal.
+
+---
+
+## Pricing
+
+**DevAssets is free.** No trial, no freemium gate, no subscription required.
+
+It is MIT-licensed open source, part of [Hyphen Network](https://github.com/0xRyanlee). The source is on GitHub. All data stays on your machine — there is no service to pay for.
+
+If DevAssets saves you from a production incident, consider [starring the repo](https://github.com/0xRyanlee/devassets).
 
 ---
 
@@ -254,7 +302,15 @@ Non-`local-env` keys show as **managed** (☁) instead of missing.
 
 ## MCP Integration (Claude Code / Cursor)
 
-Use DevAssets as an MCP server so your AI agent can query credential health and manage assets directly.
+DevAssets is the only secrets manager designed from day one for AI agents. Install it as an MCP server and your agent can check deploy-readiness, retrieve secrets, and detect identity drift — without you ever opening a terminal.
+
+```
+You:    "Is myapp ready to deploy to production?"
+Agent:  devassets_check(myapp, env=production)
+        → STRIPE_WEBHOOK_SECRET missing [high]
+        → NEON_API_KEY expired [critical]
+        → Blocking deploy. Fix these 2 issues first.
+```
 
 `.claude/settings.json`:
 ```json
@@ -347,17 +403,19 @@ MIT — part of [Hyphen Network](https://github.com/0xRyanlee).
 
 ### 中文 (Traditional Chinese)
 
-**DevAssets 是獨立開發者的本地加密環境變數管理器。**
+**DevAssets 是獨立開發者的本地加密憑證指揮中心。**
 
-你同時維護多個專案，每個都有自己的 `.env`、Vercel 專案、Supabase 資料庫、API 金鑰和支付 secret。每次部署前你都要手動核對一遍，總有漏掉的；token 是哪個帳號的記不清楚；staging 和 production 的金鑰容易貼錯。
+你同時維護多個專案，每個都有自己的 `.env`、Vercel 專案、Supabase 資料庫、API 金鑰和支付 secret。每次部署前你都要手動核對一遍，總有漏掉的；token 是哪個帳號的記不清楚；staging 和 production 的金鑰容易貼錯；AI coding agent 問你要哪個 key，你還要自己去翻 `.env` 貼給它。
 
 DevAssets 用一個 CLI 解決這些問題：
 
-- **本地加密保存 secret 值**（AES-256-GCM），不上雲、不需要帳號
+- **本地加密保存 secret 值**（AES-256-GCM），不上雲、不需要帳號、**MIT 免費**
 - **`devassets run myapp -- npm run migrate`** — 自動注入 secret 到子命令，不經過 shell 歷史記錄
-- **`devassets identity myapp`** — 自動解析每個 token 屬於哪個帳號，偵測 staging/prod 帳號混用
+- **`devassets identity myapp`** — 自動解析每個 token 屬於哪個帳號，偵測 staging/prod 帳號混用（業界唯一）
 - **`devassets check myapp --fail-on-risk`** — 部署前阻擋缺少的必要 secret，適合 CI 使用
-- **MCP 整合** — Claude Code / Cursor agent 可直接查詢憑證健康狀態
+- **MCP 整合（AI-native）** — Claude Code / Cursor agent 可直接查詢憑證健康狀態，無需切換 terminal
+
+**vs. 競品：** Doppler 和 1Password CLI 需要帳號和月費，data 存在對方的雲端。direnv 無加密。Infisical 需要自架 server。DevAssets 是唯一零雲依賴 + 身份解析 + MCP 原生的選項。
 
 ```bash
 npm install -g @hyphen-network/devassets
