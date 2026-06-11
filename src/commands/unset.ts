@@ -1,6 +1,7 @@
 import { getProject, listVaultSecrets, deleteVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
+import { isCI } from '../utils/env.js';
 import readline from 'readline';
 
 interface UnsetOptions {
@@ -25,8 +26,8 @@ export async function unsetCommand(projectId: string, key: string, options: Unse
   }
 
   if (!options.yes) {
-    if (!process.stdin.isTTY) {
-      logger.error('Interactive prompt required. Use --yes to bypass confirmation in non-TTY environments.');
+    if (!process.stdin.isTTY || isCI()) {
+      logger.error('Interactive prompt required. Use --yes to bypass confirmation in non-TTY/CI environments.');
       process.exit(1);
     }
     const confirmed = await confirm(`Delete ${key} [${env}] from ${project.name}? (y/N) `);

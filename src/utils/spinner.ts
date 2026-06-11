@@ -1,5 +1,6 @@
 import ora from 'ora';
 import chalk from 'chalk';
+import { isCI } from './env.js';
 
 type SpinnerLike = {
   start(text?: string): SpinnerLike;
@@ -29,6 +30,7 @@ function plainSpinner(): SpinnerLike {
 
 export function createSpinner(text: string, active = true): SpinnerLike {
   if (!active) return silentSpinner();
-  if (!process.stdout.isTTY) return plainSpinner();
+  // CI environments and non-TTY pipes get plain output (no animation)
+  if (!process.stdout.isTTY || isCI()) return plainSpinner();
   return ora({ text, spinner: 'dots' }) as unknown as SpinnerLike;
 }

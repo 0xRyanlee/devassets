@@ -1,5 +1,6 @@
 import { getProject, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
+import { isCI } from '../utils/env.js';
 import readline from 'readline';
 
 interface RotateOptions {
@@ -15,6 +16,10 @@ export async function rotateCommand(projectId: string, keyName: string, options:
   }
 
   if (!options.yes) {
+    if (!process.stdin.isTTY || isCI()) {
+      logger.error('Interactive confirmation required. Use --yes to bypass in non-TTY/CI environments.');
+      process.exit(1);
+    }
     const confirmed = await promptConfirm(
       `Rotate ${keyName} for ${projectId}? This will record the intent and guide you through rotation. (y/N) `
     );
