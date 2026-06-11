@@ -23,6 +23,7 @@ function loadPermissions(): PermissionsConfig {
   }
 }
 
+// TODO: wire up at MCP/CLI command entry points to enforce per-project role gates
 export function canPerformAction(action: string, projectId: string): boolean {
   const config = loadPermissions();
   const user = process.env.USER ?? 'owner';

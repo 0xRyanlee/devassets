@@ -1,6 +1,6 @@
 import { getDb } from './index.js';
 import { encryptVault, decryptVault } from '../utils/crypto.js';
-import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity } from '../types/index.js';
+import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity, SecretScope } from '../types/index.js';
 
 type Row = Record<string, unknown>;
 
@@ -192,7 +192,7 @@ import { randomUUID } from 'crypto';
 export interface VaultSecretMeta {
   key: string;
   env: string;
-  scope: 'global' | 'project';
+  scope: SecretScope;
   provider?: string;
   accountHint?: string;
   workspaceHint?: string;
@@ -233,27 +233,35 @@ export function getVaultSecret(projectId: string, env: string, key: string): str
   }
 }
 
-export function listVaultSecrets(projectId: string, env?: string, scope?: 'global' | 'project'): VaultSecretMeta[] {
+export function listVaultSecrets(projectId: string, env?: string, scope?: SecretScope): VaultSecretMeta[] {
   const db = getDb();
+  // global-scoped secrets only exist under _global — ignore caller's projectId
+  const effectiveProjectId = scope === 'global' ? '_global' : projectId;
   let rows: Row[];
   if (env && scope) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? AND scope=? ORDER BY env, key').all(projectId, env, scope) as Row[];
+    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? AND scope=? ORDER BY env, key').all(effectiveProjectId, env, scope) as Row[];
   } else if (env) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? ORDER BY env, key').all(projectId, env) as Row[];
+    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? ORDER BY env, key').all(effectiveProjectId, env) as Row[];
   } else if (scope) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND scope=? ORDER BY env, key').all(projectId, scope) as Row[];
+    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND scope=? ORDER BY env, key').all(effectiveProjectId, scope) as Row[];
   } else {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? ORDER BY env, key').all(projectId) as Row[];
+    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? ORDER BY env, key').all(effectiveProjectId) as Row[];
   }
   return rows.map(r => ({
     key: r['key'] as string,
     env: r['env'] as string,
-    scope: (r['scope'] as 'global' | 'project') ?? 'project',
+    scope: (r['scope'] as SecretScope) ?? 'project',
     provider: (r['provider'] as string) ?? undefined,
     accountHint: (r['account_hint'] as string) ?? undefined,
     workspaceHint: (r['workspace_hint'] as string) ?? undefined,
     updatedAt: r['updated_at'] as string,
   }));
+}
+
+function queryVaultSecretScope(projectId: string, env: string, key: string): SecretScope {
+  const db = getDb();
+  const r = db.prepare('SELECT scope FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
+  return (r?.['scope'] as SecretScope) ?? 'project';
 }
 
 export function deleteVaultSecret(projectId: string, env: string, key: string): boolean {
@@ -263,7 +271,7 @@ export function deleteVaultSecret(projectId: string, env: string, key: string): 
 }
 
 // Search across ALL projects' vaults by key name — returns metadata only, never plaintext values.
-export function findSecretAcrossProjects(key: string, env?: string, scope?: 'global' | 'project'): Array<VaultSecretMeta & { projectId: string }> {
+export function findSecretAcrossProjects(key: string, env?: string, scope?: SecretScope): Array<VaultSecretMeta & { projectId: string }> {
   const db = getDb();
   let rows: Row[];
   if (env && scope) {
@@ -293,15 +301,15 @@ export function getVaultSecretFallback(
   primaryProjectId: string,
   env: string,
   key: string,
-): { value: string; sourceProject: string; scope: 'global' | 'project' } | undefined {
+): { value: string; sourceProject: string; scope: SecretScope } | undefined {
   const own = getVaultSecret(primaryProjectId, env, key);
-  if (own !== undefined) return { value: own, sourceProject: primaryProjectId, scope: 'project' };
+  if (own !== undefined) return { value: own, sourceProject: primaryProjectId, scope: queryVaultSecretScope(primaryProjectId, env, key) };
 
   // Check _global project before arbitrary fallbacks
   if (primaryProjectId !== '_global') {
     try {
-      const global = getVaultSecret('_global', env, key);
-      if (global !== undefined) return { value: global, sourceProject: '_global', scope: 'global' };
+      const globalVal = getVaultSecret('_global', env, key);
+      if (globalVal !== undefined) return { value: globalVal, sourceProject: '_global', scope: queryVaultSecretScope('_global', env, key) };
     } catch {
       // vault key mismatch in _global — skip
     }

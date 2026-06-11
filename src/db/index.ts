@@ -4,6 +4,13 @@ import { DB_PATH, DEVASSETS_DIR } from '../utils/constants.js';
 
 let _db: DatabaseSync | null = null;
 
+export function closeDb(): void {
+  if (_db) {
+    try { _db.close(); } catch { /* ignore */ }
+    _db = null;
+  }
+}
+
 export function getDb(): DatabaseSync {
   if (!_db) {
     try {
@@ -18,6 +25,9 @@ export function getDb(): DatabaseSync {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Cannot open DevAssets database at ${DB_PATH}: ${msg}\nTry running "devassets init" or check disk space.`);
     }
+    // WAL mode allows concurrent readers + one writer; busy_timeout retries on lock instead of failing immediately
+    _db.exec('PRAGMA journal_mode=WAL');
+    _db.exec('PRAGMA busy_timeout=5000');
     runMigrations(_db);
   }
   return _db;

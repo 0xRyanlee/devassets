@@ -38,10 +38,17 @@ export async function rotateCommand(projectId: string, keyName: string, options:
   logger.success(`Rotation initiated: ${keyName}`);
   logger.raw('');
   logger.raw('Manual steps required:');
-  logger.raw(`  1. Generate a new ${keyName} in the relevant dashboard`);
-  logger.raw(`  2. Update ${keyName} in your .env / secret vault`);
+  logger.raw(`  1. Generate a new ${keyName} in the relevant service dashboard`);
+  if (projectId === '_global') {
+    logger.raw(`  2. Store the new value: devassets set _global ${keyName}`);
+  } else {
+    logger.raw(`  2. Store the new value: devassets set ${projectId} ${keyName}`);
+    logger.raw(`     (also update your .env file if the project reads from .env)`);
+  }
   logger.raw(`  3. Deploy to pick up the new value`);
-  logger.raw(`  4. Run: devassets scan ${projectId}  (to record the change)`);
+  if (projectId !== '_global') {
+    logger.raw(`  4. Run: devassets scan ${projectId}  (to record the change)`);
+  }
   logger.raw('');
   logger.warn('Rotation is recorded in audit log. Complete the manual steps above.');
 }

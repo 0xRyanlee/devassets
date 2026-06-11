@@ -21,9 +21,16 @@ export function runCommand(projectId: string, args: string[], options: RunOption
 
   const env = options.env ?? 'local';
   const all = listVaultSecrets(projectId, env);
+
+  // Merge global vault; project-specific keys take precedence over global
+  const globalAll = projectId === '_global' ? [] : listVaultSecrets('_global', env);
+  const projectKeys = new Set(all.map(s => s.key));
+  const globalOnly = globalAll.filter(s => !projectKeys.has(s.key));
+  const merged = [...globalOnly, ...all];
+
   const targets = options.keys && options.keys.length > 0
-    ? all.filter(s => options.keys!.includes(s.key))
-    : all;
+    ? merged.filter(s => options.keys!.includes(s.key))
+    : merged;
 
   if (targets.length === 0) {
     logger.warn(`No secrets found for ${project.name} [${env}]; running without injection`);
@@ -31,8 +38,9 @@ export function runCommand(projectId: string, args: string[], options: RunOption
 
   const injected: Record<string, string> = {};
   for (const meta of targets) {
+    const sourceProjectId = globalOnly.some(g => g.key === meta.key) ? '_global' : projectId;
     try {
-      const value = getVaultSecret(projectId, env, meta.key);
+      const value = getVaultSecret(sourceProjectId, env, meta.key);
       if (value !== undefined) injected[meta.key] = value;
     } catch (err) {
       logger.error(err instanceof Error ? err.message : String(err));

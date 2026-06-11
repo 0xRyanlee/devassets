@@ -37,6 +37,8 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
     let result = validateAssets(assets, projectId, options.env, project.type);
 
     const paymentStatuses: PaymentStatus[] = [];
+    // When no env is specified, default to 'production' for payment key lookups —
+    // payment integrations are most meaningful against production credentials.
     const vaultEnv = options.env ?? 'production';
     for (const platform of platforms) {
       sp.text = `Checking ${platform.name} status…`;
