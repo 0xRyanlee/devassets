@@ -2,6 +2,7 @@ import readline from 'readline';
 import { getProject, setVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
+import { isCI } from '../utils/env.js';
 
 interface SetOptions {
   env?: string;
@@ -19,6 +20,11 @@ export async function setCommand(projectId: string, key: string, value: string |
 
   const env = options.env ?? 'local';
   let secretValue = value;
+
+  // Warn when value is passed as a CLI argument — it will appear in shell history
+  if (secretValue && !isCI()) {
+    process.stderr.write(`  Warning: secret value visible in shell history. Omit the value to use masked interactive input.\n`);
+  }
 
   if (!secretValue) {
     secretValue = await promptSecret(`Enter value for ${key} (${env}): `);
