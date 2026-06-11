@@ -14,7 +14,7 @@ import { generateCiSnippet } from '../core/ci.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '0.9.0',
+    version: '1.11.20260611',
   });
 
   server.tool(

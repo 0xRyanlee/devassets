@@ -201,6 +201,8 @@ DevAssets stores secrets locally on your machine with no external service involv
 - **Values never logged or exported** — `list`, `audit`, and `export` show key names and metadata only
 - **Agent (MCP) access is metadata-only** by default — reading a value requires an explicit `get` or `inject` call
 - **Cross-project sharing is always explicit** — no automatic propagation between projects
+- **Auto-update notification** — DevAssets checks the npm registry for newer versions at startup (cached 24h, non-blocking, TTY-only — silent in CI pipelines). If a security patch is available, you'll see a one-line stderr notice.
+- **CI-aware** — spinner, interactive prompts, and update notifications are all suppressed in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
 
 > **Security warning:** `~/.devassets/signature.key` is the root of all vault encryption. If this file leaks (iCloud Drive, Time Machine, dotfiles repo), every secret you have ever stored can be decrypted. **Required:** exclude `~/.devassets/` from iCloud Drive, Time Machine, and any dotfiles `.gitignore`. Loss of `signature.key` means all stored secrets are permanently unrecoverable. `devassets init` prints step-by-step exclusion instructions.
 
