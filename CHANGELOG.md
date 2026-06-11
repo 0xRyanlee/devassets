@@ -1,5 +1,51 @@
 # Changelog
 
+> **Version scheme (from v1.11 onwards):** `GENERATION.MINOR.YYYYMMDD[.N]`
+> — Generation 1 = production; Minor increments per feature sprint; Date = release date.
+
+---
+
+## [1.11.20260611] — 2026-06-11
+
+### Added
+- **Auto-update notification** (`src/utils/update-check.ts`): non-blocking npm registry check
+  at startup; caches result 24h at `~/.devassets/last-update-check.json`; warns to stderr
+  when a newer version is available. Only fires in interactive TTY sessions (not CI).
+- **CI detection** (`src/utils/env.ts`): `isCI()` / `isInteractive()` utility checks
+  `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CIRCLECI`, `TRAVIS` env vars.
+- **Global vault** (`_global` project): account-level credentials shared across all projects.
+  `devassets set _global VERCEL_TOKEN` — scope auto-set to `global`.
+  `inject` / `run` merge global keys automatically; project-specific keys take precedence.
+- MCP: `devassets_get_global_secret` / `devassets_set_global_secret` tools.
+- `src/core/ci.ts`: `generateCiSnippet` extracted from MCP server for reuse.
+- 17 new vault-db unit tests covering scope routing, fallback priority order,
+  `listVaultSecrets` redirect, `findSecretAcrossProjects` filter.
+
+### Changed
+- Spinner suppresses animation in CI environments (`isCI()` check added).
+- `rotate` / `unset`: fail-fast with clear error when run in CI without `--yes`.
+- `set` warns to stderr when value is passed as CLI argument (shell history risk).
+- `status` / `doctor` filter `_global` from project table; show global vault count separately.
+- `devassets_get_global_secret` not-found hint now points to MCP tool syntax.
+- `devassets_set_global_secret` value schema adds `.max(65536)` guard.
+- Cloud backup warning in `init` output and README strengthened with step-by-step
+  iCloud / Time Machine / `.gitignore` instructions.
+- WAL mode + `busy_timeout=5000` on DB open for concurrent access safety.
+
+### Security
+- `inject --print` now uses single-quote wrapping with `'\''` escaping — safe for all
+  shell meta-characters (`$`, `` ` ``, `\`, `!`, spaces).
+- `getVaultSecretFallback` scope read from DB (not hardcoded strings).
+
+### Fixed
+- `listVaultSecrets(scope='global')` auto-redirects to `_global` project regardless of
+  caller's `projectId` argument.
+- `CLI get` falls back to `_global` vault on primary project miss.
+
+**127 tests pass.**
+
+---
+
 ## 0.10.0 — 2026-06-10
 
 ### `status` command + web UI removed from bundle
