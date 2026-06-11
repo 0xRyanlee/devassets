@@ -1,4 +1,4 @@
-import { getProject, getVaultSecret } from '../db/queries.js';
+import { getProject, getVaultSecret, getGlobalSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 
@@ -17,8 +17,14 @@ export function getCommand(projectId: string, key: string, options: GetOptions) 
 
   const env = options.env ?? 'local';
   let value: string | undefined;
+  let sourceProject = projectId;
   try {
     value = getVaultSecret(projectId, env, key);
+    // Fall back to global vault for account-level credentials
+    if (value === undefined && projectId !== '_global') {
+      value = getGlobalSecret(key, env);
+      if (value !== undefined) sourceProject = '_global';
+    }
   } catch (err) {
     logger.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
@@ -27,15 +33,16 @@ export function getCommand(projectId: string, key: string, options: GetOptions) 
   if (value === undefined) {
     logger.error(`Secret not found: ${key} [${env}]`);
     logger.raw(`  Run: devassets list ${projectId} to see stored keys`);
+    logger.raw(`  Or:  devassets list _global  (for account-level credentials)`);
     process.exit(1);
   }
 
   addAuditLog({
-    projectId,
+    projectId: sourceProject,
     action: 'get',
     user: getCurrentUser(),
     timestamp: new Date().toISOString(),
-    details: { key, env },
+    details: { key, env, ...(sourceProject !== projectId ? { fallbackFrom: projectId } : {}) },
     result: 'success',
   });
 

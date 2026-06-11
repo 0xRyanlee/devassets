@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { listProjects } from '../db/queries.js';
 import { listVaultSecrets, getCredentialIdentities, getAssets } from '../db/queries.js';
+import { getVaultSecretCounts } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 
 interface StatusOptions {
@@ -22,7 +23,8 @@ interface ProjectRow {
 }
 
 export function statusCommand(options: StatusOptions) {
-  const projects = listProjects();
+  // _global is a reserved virtual project — handled separately below
+  const projects = listProjects().filter(p => p.id !== '_global');
 
   if (projects.length === 0) {
     logger.info('No projects registered. Quick start:');
@@ -169,7 +171,14 @@ export function statusCommand(options: StatusOptions) {
   const mismatches = rows.filter(r => !r.identityOk).length;
   const unscanned = rows.filter(r => r.assets === 'unscanned').length;
 
-  let summary = `  ${total} project${total !== 1 ? 's' : ''} · ${totalSecrets} secret${totalSecrets !== 1 ? 's' : ''}`;
+  // Global vault summary (account-level credentials)
+  const vaultCounts = getVaultSecretCounts();
+  const globalCount = vaultCounts['_global'] ?? 0;
+  const globalSummary = globalCount > 0
+    ? chalk.cyan(` · global vault: ${globalCount} key${globalCount !== 1 ? 's' : ''}`)
+    : chalk.dim(` · global vault: empty  (devassets set _global <KEY>)`);
+
+  let summary = `  ${total} project${total !== 1 ? 's' : ''} · ${totalSecrets} secret${totalSecrets !== 1 ? 's' : ''}${globalSummary}`;
   if (unscanned > 0) summary += ` · ${chalk.dim(`${unscanned} unscanned`)}`;
   if (warnings > 0) summary += ` · ${chalk.yellow(`${warnings} ⚠ asset warning${warnings !== 1 ? 's' : ''}`)}`;
   if (mismatches > 0) summary += ` · ${chalk.yellow(`${mismatches} ⚠ identity issue${mismatches !== 1 ? 's' : ''}`)}`;

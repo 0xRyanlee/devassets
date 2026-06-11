@@ -1,4 +1,5 @@
 export type AssetStatus = 'configured' | 'missing' | 'error' | 'warning' | 'managed';
+export type SecretScope = 'global' | 'project';
 export type SecretLocation = 'local-env' | 'cloud-platform' | 'ci-secret' | 'runtime-user' | 'source-public' | 'external-vault';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type ProjectType = 'saas' | 'mobile' | 'desktop' | 'library' | 'other';

@@ -31,7 +31,7 @@ export async function setCommand(projectId: string, key: string, value: string |
   setVaultSecret(projectId, env, key, secretValue, {
     provider: options.provider,
     account: options.account,
-  });
+  }, projectId === '_global' ? 'global' : 'project');
 
   addAuditLog({
     projectId,

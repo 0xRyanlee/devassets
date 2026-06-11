@@ -9,6 +9,7 @@ import { exportManifest, generateOutputPath } from '../core/exporter.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
 import { buildDoctorReport } from '../commands/doctor.js';
+import { generateCiSnippet } from '../core/ci.js';
 
 export async function startMcpServer() {
   const server = new McpServer({
@@ -47,6 +48,8 @@ export async function startMcpServer() {
 
       const platforms = getPaymentPlatforms(projectId);
       const paymentStatuses = [];
+      // Default to 'production' for payment key lookups when no env specified —
+      // payment integrations are most meaningful against production credentials.
       const vaultEnv = environment ?? 'production';
       for (const p of platforms) {
         if (p.name === 'paddle') {
@@ -204,16 +207,22 @@ export async function startMcpServer() {
 
       addAuditLog({ projectId, action: 'rotate', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { keyName: key_name, status: 'initiated', via: 'mcp' }, result: 'success' });
 
+      const isGlobal = projectId === '_global';
+      const storeStep = isGlobal
+        ? `Store the new value via MCP: call devassets_set_global_secret(key="${key_name}", value="<new-value>")`
+        : `Store the new value: call devassets_set_secret or run: devassets set ${projectId} ${key_name}`;
+      const steps = [
+        `Generate a new ${key_name} in the relevant service dashboard`,
+        storeStep,
+        'Deploy to pick up the new value',
+        ...(!isGlobal ? [`Run: devassets scan ${projectId}  (to record the .env change)`] : []),
+      ];
       const instructions = {
         key: key_name,
         project: projectId,
+        scope: isGlobal ? 'global' : 'project',
         status: 'rotation_initiated',
-        steps: [
-          `Generate a new ${key_name} in the relevant service dashboard`,
-          `Update ${key_name} in your .env file and any deployment secrets`,
-          'Deploy to pick up the new value',
-          `Run: devassets scan ${projectId}  (to record the change)`,
-        ],
+        steps,
         auditRecorded: true,
       };
 
@@ -420,7 +429,7 @@ export async function startMcpServer() {
       }
 
       if (!value) {
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', message: `${key} not found in global vault [${env}]. Store it with: devassets set _global ${key} --env ${env}` }) }] };
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', message: `${key} not found in global vault [${env}]. Store it with MCP: call devassets_set_global_secret(key="${key}", value="<secret>", env="${env}")` }) }] };
       }
 
       addAuditLog({ projectId: '_global', action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
@@ -434,7 +443,7 @@ export async function startMcpServer() {
     'Store an account-level credential in the global vault. Use for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, etc. Does not require a project context. Stored once, accessible from any project via devassets_get_global_secret.',
     {
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
-      value: z.string().min(1).describe('The secret value to store'),
+      value: z.string().min(1).max(65536).describe('The secret value to store'),
       env: z.string().optional().describe('Environment (default: production)'),
       provider: z.string().optional().describe('Provider hint (e.g. vercel, anthropic, github)'),
       account: z.string().optional().describe('Account/email hint for identity tracking'),
@@ -452,45 +461,3 @@ export async function startMcpServer() {
   await server.connect(transport);
 }
 
-function generateCiSnippet(projectId: string, branch: string, environment: string) {
-  const safe = /^[a-zA-Z0-9_.-]+$/;
-  if (!safe.test(projectId) || !safe.test(branch) || !safe.test(environment)) {
-    throw new Error('projectId, branch, and environment must contain only alphanumeric characters, hyphens, underscores, and dots');
-  }
-  const reusable = `name: DevAssets Check
-on:
-  push:
-    branches: [${branch}]
-  pull_request:
-    branches: [${branch}]
-
-jobs:
-  asset-check:
-    uses: 0xRyanlee/devassets/.github/workflows/check.yml@main
-    with:
-      project: ${projectId}
-      environment: ${environment}`;
-
-  const standalone = `name: DevAssets Check
-on:
-  push:
-    branches: [${branch}]
-  pull_request:
-    branches: [${branch}]
-
-jobs:
-  asset-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm install -g @hyphen-network/devassets
-      - run: devassets init
-      - run: devassets add-project ${projectId} --path=\${{ github.workspace }} --type=saas
-      - run: devassets scan ${projectId}
-      - run: devassets check ${projectId} --env=${environment} --fail-on-risk`;
-
-  return { reusable, standalone };
-}

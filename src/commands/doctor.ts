@@ -18,6 +18,7 @@ export interface DoctorReport {
     healthy: number;
     warning: number;
     critical: number;
+    globalVaultKeys: number;
   };
   projects: ProjectHealth[];
   topRisks: TopRisk[];
@@ -50,7 +51,8 @@ interface RecentActivity {
 }
 
 export async function doctorCommand(options: DoctorOptions) {
-  const projects = listProjects();
+  // _global is a reserved virtual project — skip in the main loop
+  const projects = listProjects().filter(p => p.id !== '_global');
 
   if (projects.length === 0) {
     logger.warn('No projects registered. Run: devassets add-project <name> --path=<path>');
@@ -112,6 +114,8 @@ async function runDoctorFix(projects: ReturnType<typeof listProjects>, silent: b
 }
 
 export function buildDoctorReport(projects: ReturnType<typeof listProjects>): DoctorReport {
+  // Strip _global from the project list — it's not a scannable project
+  projects = projects.filter(p => p.id !== '_global');
   const now = new Date().toISOString();
   const projectHealths: ProjectHealth[] = [];
   const topRisks: TopRisk[] = [];
@@ -160,6 +164,7 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
       healthy: projectHealths.filter(p => p.status === 'healthy').length,
       warning: projectHealths.filter(p => p.status === 'warning').length,
       critical: projectHealths.filter(p => p.status === 'critical').length,
+      globalVaultKeys: vaultCounts['_global'] ?? 0,
     },
     projects: projectHealths,
     topRisks: topRisks.slice(0, 10),
@@ -174,11 +179,15 @@ function printDoctorReport(report: DoctorReport) {
   console.log(chalk.gray(new Date(report.generatedAt).toLocaleString()));
   console.log('');
 
+  const globalStr = summary.globalVaultKeys > 0
+    ? chalk.cyan(`${summary.globalVaultKeys} global key${summary.globalVaultKeys !== 1 ? 's' : ''}`)
+    : chalk.dim('global vault: empty');
   const summaryParts = [
     chalk.white(`${summary.total} projects`),
     chalk.green(`${summary.healthy} healthy`),
     summary.warning > 0 ? chalk.yellow(`${summary.warning} warning`) : null,
     summary.critical > 0 ? chalk.red(`${summary.critical} critical`) : null,
+    globalStr,
   ].filter(Boolean);
   console.log('  ' + summaryParts.join('  ·  '));
   console.log('');

@@ -87,6 +87,8 @@ let _vaultKey: Buffer | null = null;
 export function getVaultKey(): Buffer {
   if (!_vaultKey) {
     const sigKey = getSignatureKey();
+    // HKDF separates signing and encryption domains: same IKM, different info label → independent keys.
+    // Salt omitted (empty string) because sigKey is already a uniformly random 32-byte value (no need to extract).
     const derived = hkdfSync('sha256', sigKey, Buffer.from('devassets-vault-v1'), '', 32);
     _vaultKey = Buffer.from(derived);
   }
