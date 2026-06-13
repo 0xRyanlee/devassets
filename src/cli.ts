@@ -20,6 +20,7 @@ import { listCommand } from './commands/list.js';
 import { unsetCommand } from './commands/unset.js';
 import { injectCommand } from './commands/inject.js';
 import { runCommand } from './commands/run.js';
+import { ipcCommand } from './commands/ipc.js';
 
 const program = new Command();
 
@@ -185,5 +186,10 @@ program
     const args = raw[0] === '--' ? raw.slice(1) : raw;
     runCommand(projectId, args, options);
   });
+
+program
+  .command('ipc')
+  .description('JSON-lines IPC server for Sparkie integration (reads from stdin, writes to stdout)')
+  .action(ipcCommand);
 
 export { program };
