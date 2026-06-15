@@ -1,4 +1,4 @@
-import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser, findSecretAcrossProjects, getVaultSecretFallback, getLastScanLog } from '../db/queries.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
@@ -29,8 +29,12 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
   try {
     const assets = getAssets(projectId, options.env);
     if (assets.length === 0 && active) {
-      sp.stop();
-      logger.warn(`No assets found for ${project.name} — run "devassets scan ${projectId}" first`);
+      const lastScan = getLastScanLog(projectId);
+      if (!lastScan) {
+        sp.stop();
+        logger.warn(`No assets found for ${project.name} — run "devassets scan ${projectId}" first`);
+      }
+      // scanned but found 0 assets → healthy, continue silently
     }
     const platforms = getPaymentPlatforms(projectId);
 

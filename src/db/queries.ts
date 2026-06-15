@@ -108,6 +108,23 @@ export function addAuditLog(log: Omit<AuditLog, 'id'>) {
     .run(log.projectId, log.action, log.user, log.timestamp, details, log.result);
 }
 
+export function getLastScanLog(projectId: string): AuditLog | undefined {
+  const db = getDb();
+  const r = db.prepare(
+    "SELECT * FROM audit_logs WHERE project_id=? AND action='scan' ORDER BY timestamp DESC LIMIT 1"
+  ).get(projectId) as Row | undefined;
+  if (!r) return undefined;
+  return {
+    id: r['id'] as number,
+    projectId: r['project_id'] as string,
+    action: r['action'] as string,
+    user: r['user'] as string,
+    timestamp: r['timestamp'] as string,
+    details: r['details'] ? JSON.parse(r['details'] as string) : undefined,
+    result: r['result'] as AuditLog['result'],
+  };
+}
+
 export function getAuditLogs(projectId: string, sinceDays?: number): AuditLog[] {
   const db = getDb();
   let rows: Row[];
