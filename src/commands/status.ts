@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import { listProjects } from '../db/queries.js';
-import { listVaultSecrets, getCredentialIdentities, getAssets } from '../db/queries.js';
-import { getVaultSecretCounts } from '../db/queries.js';
+import { listVaultSecrets, getCredentialIdentities, getAssets, getLastScanLog, getVaultSecretCounts } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 
 interface StatusOptions {
@@ -39,6 +38,7 @@ export function statusCommand(options: StatusOptions) {
     const secrets = listVaultSecrets(p.id);
     const assets = getAssets(p.id);
     const identities = getCredentialIdentities(p.id);
+    const lastScan = getLastScanLog(p.id);
 
     // Vault column: "local:5 · staging:2" or "—"
     const envCounts = new Map<string, number>();
@@ -49,10 +49,10 @@ export function statusCommand(options: StatusOptions) {
       ? '—'
       : [...envCounts.entries()].map(([e, n]) => `${e}:${n}`).join(' · ');
 
-    // Assets column: "12 vars · 0 miss" or "unscanned"
+    // Assets column: "12 vars · 0 miss" / "scanned · 0" / "unscanned"
     const missingCount = assets.filter(a => a.status === 'missing' || a.status === 'error').length;
     const assetsStr = assets.length === 0
-      ? 'unscanned'
+      ? (lastScan ? 'scanned · 0' : 'unscanned')
       : `${assets.length} vars · ${missingCount} miss`;
 
     // Identity column: "✓ 3 pinned" / "⚠ mismatch" / "✗ N invalid" / "—"
@@ -75,11 +75,15 @@ export function statusCommand(options: StatusOptions) {
       }
     }
 
-    // Last scan: relative time from max lastSeen
+    // Last scan: prefer audit log timestamp; fall back to max lastSeen on assets
     const lastSeens = assets.map(a => new Date(a.lastSeen).getTime()).filter(t => !isNaN(t));
-    const ago = lastSeens.length === 0 ? '—' : relativeTime(Math.max(...lastSeens));
+    const scanTs = lastScan ? new Date(lastScan.timestamp).getTime() : NaN;
+    const ago = !isNaN(scanTs)
+      ? relativeTime(scanTs)
+      : lastSeens.length > 0 ? relativeTime(Math.max(...lastSeens)) : '—';
 
-    const needsAttention = missingCount > 0 || !identityOk || assets.length === 0;
+    const neverScanned = assets.length === 0 && !lastScan;
+    const needsAttention = missingCount > 0 || !identityOk || neverScanned;
 
     return {
       id: p.id,
@@ -169,7 +173,7 @@ export function statusCommand(options: StatusOptions) {
   const totalSecrets = rows.reduce((s, r) => s + r.vaultCount, 0);
   const warnings = rows.filter(r => r.assetMissing > 0).length;
   const mismatches = rows.filter(r => !r.identityOk).length;
-  const unscanned = rows.filter(r => r.assets === 'unscanned').length;
+  const unscanned = rows.filter(r => r.assets === 'unscanned').length; // truly never scanned
 
   // Global vault summary (account-level credentials)
   const vaultCounts = getVaultSecretCounts();
@@ -190,7 +194,7 @@ export function statusCommand(options: StatusOptions) {
     const issueRows: IssueRow[] = [];
     for (const r of attention) {
       if (r.assets === 'unscanned') {
-        issueRows.push({ project: r.name, issue: 'unscanned', why: 'scan never run', action: `devassets scan ${r.id}` });
+        issueRows.push({ project: r.name, issue: 'unscanned', why: 'scan never run — no .env detected yet', action: `devassets scan ${r.id}` });
       } else if (r.assetMissing > 0) {
         issueRows.push({ project: r.name, issue: `${r.assetMissing} missing secret${r.assetMissing > 1 ? 's' : ''}`, why: 'in .env.example but not in .env', action: `devassets check ${r.id}` });
       }
