@@ -21,6 +21,7 @@ import { unsetCommand } from './commands/unset.js';
 import { injectCommand } from './commands/inject.js';
 import { runCommand } from './commands/run.js';
 import { ipcCommand } from './commands/ipc.js';
+import { deleteProjectCommand } from './commands/delete-project.js';
 
 const program = new Command();
 
@@ -49,6 +50,12 @@ program
   .option('--type <type>', 'Project type: saas | mobile | desktop | library | other', 'other')
   .option('--id <id>', 'Explicit project ID (overrides auto-derived slug)')
   .action(addProjectCommand);
+
+program
+  .command('delete-project <project>')
+  .description('Remove a project and all its vault secrets from DevAssets')
+  .option('--force', 'Skip confirmation prompt (use in CI)')
+  .action(deleteProjectCommand);
 
 program
   .command('scan <project>')
