@@ -34,6 +34,7 @@ import {
   getGlobalSecret,
   upsertProject,
 } from '../../src/db/queries.js';
+import { DEFAULT_ENV } from '../../src/utils/constants.js';
 
 beforeAll(() => {
   fs.mkdirSync(TEST_HOME, { recursive: true });
@@ -176,5 +177,27 @@ describe('getGlobalSecret', () => {
   it('returns undefined for unknown global key', () => {
     const val = getGlobalSecret('DEFINITELY_NOT_SET_XYZ', 'production');
     expect(val).toBeUndefined();
+  });
+});
+
+describe('DEFAULT_ENV consistency — CLI/MCP env parity', () => {
+  it('DEFAULT_ENV is local', () => {
+    expect(DEFAULT_ENV).toBe('local');
+  });
+
+  it('set with DEFAULT_ENV then get with DEFAULT_ENV round-trips', () => {
+    setVaultSecret('proj-a', DEFAULT_ENV, 'ENV_PARITY_KEY', 'parity_value', {}, 'project');
+    const val = getVaultSecret('proj-a', DEFAULT_ENV, 'ENV_PARITY_KEY');
+    expect(val).toBe('parity_value');
+  });
+
+  it('key stored in DEFAULT_ENV is NOT found when queried with production', () => {
+    const val = getVaultSecret('proj-a', 'production', 'ENV_PARITY_KEY');
+    expect(val).toBeUndefined();
+  });
+
+  it('findSecretAcrossProjects finds key stored in DEFAULT_ENV regardless of queried env', () => {
+    const matches = findSecretAcrossProjects('ENV_PARITY_KEY');
+    expect(matches.some(m => m.env === DEFAULT_ENV)).toBe(true);
   });
 });
