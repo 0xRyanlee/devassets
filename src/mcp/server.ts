@@ -23,7 +23,10 @@ export async function startMcpServer() {
     'List all registered projects and their health status',
     {},
     async () => {
-      const projects = listProjects();
+      const projects = listProjects().filter(p => p.id !== '_global');
+      if (projects.length === 0) {
+        return { content: [{ type: 'text', text: JSON.stringify({ projects: [], message: 'No projects registered. Run: devassets add-project <name> --path=<path>' }) }] };
+      }
       const enriched = projects.map(p => {
         const assets = getAssets(p.id);
         const result = validateAssets(assets, p.id, undefined, p.type);
@@ -165,7 +168,10 @@ export async function startMcpServer() {
       focus: z.string().optional().describe('Focus area: payments | env | webhooks'),
     },
     async ({ project: projectId, focus }) => {
-      const projects = projectId ? [getProject(projectId)].filter(Boolean) : listProjects();
+      const projects = projectId ? [getProject(projectId)].filter(Boolean) : listProjects().filter(p => p.id !== '_global');
+      if (projects.length === 0) {
+        return { content: [{ type: 'text', text: JSON.stringify({ projects: [], message: projectId ? `Project not found: ${projectId}` : 'No projects registered. Run: devassets add-project <name> --path=<path>' }) }] };
+      }
       const summaries = projects.map(p => {
         if (!p) return null;
         const assets = getAssets(p.id);

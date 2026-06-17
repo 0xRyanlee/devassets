@@ -33,7 +33,14 @@ export function upsertProject(project: Omit<Project, 'createdAt' | 'updatedAt'> 
 }
 
 export function deleteProject(id: string) {
-  getDb().prepare('DELETE FROM projects WHERE id=?').run(id);
+  const db = getDb();
+  // FK CASCADE requires PRAGMA foreign_keys=ON which is not globally enabled;
+  // delete dependent rows explicitly to avoid orphaned vault data.
+  db.prepare('DELETE FROM secret_values WHERE project_id=?').run(id);
+  db.prepare('DELETE FROM assets WHERE project_id=?').run(id);
+  db.prepare('DELETE FROM payment_platforms WHERE project_id=?').run(id);
+  db.prepare('DELETE FROM credential_identities WHERE project_id=?').run(id);
+  db.prepare('DELETE FROM projects WHERE id=?').run(id);
 }
 
 export function getAssets(projectId: string, environment?: string): Asset[] {
