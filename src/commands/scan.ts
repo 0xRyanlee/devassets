@@ -55,6 +55,13 @@ export function scanCommand(projectId: string, options: ScanOptions) {
     logger.raw(`  Env files: ${result.envFilesFound.join(', ') || 'none'}`);
     logger.raw(`  Assets:    ${result.assets.length}`);
     logger.raw(`  Platforms: ${result.detectedPlatforms.join(', ') || 'none detected'}`);
+    if (result.hardcodedFindings.length > 0) {
+      logger.raw(`  Hardcoded: ${result.hardcodedFindings.length} potential secret(s) found in source files`);
+      for (const f of result.hardcodedFindings) {
+        logger.raw(`    [${f.pattern}] ${f.file}:${f.line}  ${f.match}`);
+      }
+      logger.raw(`  Add paths to .devassetsignore to suppress false positives.`);
+    }
     logger.raw('');
     logger.raw(`Next: devassets check ${projectId}`);
   } catch (err) {
