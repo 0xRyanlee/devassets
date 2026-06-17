@@ -28,8 +28,8 @@ const program = new Command();
 program
   .name('devassets')
   .description('Developer asset management for independent developers')
-  .version('1.11.0')
-  .hook('preAction', () => { scheduleUpdateCheck('1.11.0'); })
+  .version('1.12.20260618')
+  .hook('preAction', () => { scheduleUpdateCheck('1.12.20260618'); })
   .action(() => statusCommand({}));
 
 program
