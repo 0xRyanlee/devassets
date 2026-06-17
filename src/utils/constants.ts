@@ -57,3 +57,5 @@ export const API_KEY_ROTATION_THRESHOLD_DAYS = 90;
 export const API_KEY_WARNING_THRESHOLD_DAYS = 60;
 
 export const DEFAULT_UI_PORT = 9090;
+
+export const DEFAULT_ENV = 'local';

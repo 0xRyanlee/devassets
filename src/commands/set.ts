@@ -3,6 +3,7 @@ import { getProject, setVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 import { isCI } from '../utils/env.js';
+import { DEFAULT_ENV } from '../utils/constants.js';
 
 interface SetOptions {
   env?: string;
@@ -18,7 +19,7 @@ export async function setCommand(projectId: string, key: string, value: string |
     process.exit(1);
   }
 
-  const env = options.env ?? 'local';
+  const env = options.env ?? DEFAULT_ENV;
   let secretValue = value;
 
   // Warn when value is passed as a CLI argument — it will appear in shell history

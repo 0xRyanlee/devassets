@@ -10,6 +10,7 @@ import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
 import { buildDoctorReport } from '../commands/doctor.js';
 import { generateCiSnippet } from '../core/ci.js';
+import { DEFAULT_ENV } from '../utils/constants.js';
 
 export async function startMcpServer() {
   const server = new McpServer({
@@ -396,15 +397,20 @@ export async function startMcpServer() {
     {
       project: z.string().describe('Primary project ID to look up first'),
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. PADDLE_API_KEY)'),
-      env: z.string().optional().describe('Environment (default: production)'),
+      env: z.string().optional().describe('Environment (default: local)'),
     },
-    async ({ project: projectId, key, env = 'production' }) => {
+    async ({ project: projectId, key, env = DEFAULT_ENV }) => {
       const project = getProject(projectId);
       if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
 
       const result = getVaultSecretFallback(projectId, env, key);
       if (!result) {
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, message: `${key} not found in any vault for env=${env}. Run: devassets set credentials ${key} --env ${env}` }) }] };
+        const elsewhere = findSecretAcrossProjects(key);
+        const altEnvs = [...new Set(elsewhere.map(m => m.env))].filter(e => e !== env);
+        const message = altEnvs.length > 0
+          ? `${key} exists under env=${altEnvs.join(',')} but you queried env=${env}. Add --env ${altEnvs[0]} or omit to use the default (${DEFAULT_ENV}).`
+          : `${key} not found in any vault for env=${env}. Run: devassets set ${projectId} ${key} --env ${env}`;
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message }) }] };
       }
 
       addAuditLog({ projectId, action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, sourceProject: result.sourceProject, scope: result.scope, via: 'mcp' }, result: 'success' });
@@ -418,9 +424,9 @@ export async function startMcpServer() {
     'Retrieve an account-level credential from the global vault. Use this for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, STRIPE_SECRET_KEY (when shared), etc. Does not require a project context. Returns the plaintext value.',
     {
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
-      env: z.string().optional().describe('Environment (default: production)'),
+      env: z.string().optional().describe('Environment (default: local)'),
     },
-    async ({ key, env = 'production' }) => {
+    async ({ key, env = DEFAULT_ENV }) => {
       let value: string | undefined;
       try {
         value = getGlobalSecret(key, env);
@@ -429,7 +435,12 @@ export async function startMcpServer() {
       }
 
       if (!value) {
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', message: `${key} not found in global vault [${env}]. Store it with MCP: call devassets_set_global_secret(key="${key}", value="<secret>", env="${env}")` }) }] };
+        const elsewhere = findSecretAcrossProjects(key);
+        const altEnvs = [...new Set(elsewhere.map(m => m.env))].filter(e => e !== env);
+        const message = altEnvs.length > 0
+          ? `${key} exists under env=${altEnvs.join(',')} but you queried env=${env}. Specify env explicitly.`
+          : `${key} not found in global vault [${env}]. Store it with: devassets_set_global_secret(key="${key}", value="<secret>")`;
+        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message }) }] };
       }
 
       addAuditLog({ projectId: '_global', action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
@@ -444,11 +455,11 @@ export async function startMcpServer() {
     {
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
       value: z.string().min(1).max(65536).describe('The secret value to store'),
-      env: z.string().optional().describe('Environment (default: production)'),
+      env: z.string().optional().describe('Environment (default: local)'),
       provider: z.string().optional().describe('Provider hint (e.g. vercel, anthropic, github)'),
       account: z.string().optional().describe('Account/email hint for identity tracking'),
     },
-    async ({ key, value, env = 'production', provider, account }) => {
+    async ({ key, value, env = DEFAULT_ENV, provider, account }) => {
       setVaultSecret('_global', env, key, value, { provider, account }, 'global');
 
       addAuditLog({ projectId: '_global', action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });

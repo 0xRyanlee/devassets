@@ -1,6 +1,7 @@
 import { getProject, getVaultSecret, getGlobalSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
+import { DEFAULT_ENV } from '../utils/constants.js';
 
 interface GetOptions {
   env?: string;
@@ -15,7 +16,7 @@ export function getCommand(projectId: string, key: string, options: GetOptions) 
     process.exit(1);
   }
 
-  const env = options.env ?? 'local';
+  const env = options.env ?? DEFAULT_ENV;
   let value: string | undefined;
   let sourceProject = projectId;
   try {
