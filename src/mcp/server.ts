@@ -189,6 +189,9 @@ export async function startMcpServer() {
       action: z.string().optional().describe('Filter by action type: scan | check | export | rotate | verify'),
     },
     async ({ project: projectId, since_days = 7, action }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+
       let logs = getAuditLogs(projectId, since_days);
       if (action) logs = logs.filter(l => l.action === action);
       return { content: [{ type: 'text', text: JSON.stringify(logs, null, 2) }] };
@@ -211,7 +214,7 @@ export async function startMcpServer() {
       const isGlobal = projectId === '_global';
       const storeStep = isGlobal
         ? `Store the new value via MCP: call devassets_set_global_secret(key="${key_name}", value="<new-value>")`
-        : `Store the new value: call devassets_set_secret or run: devassets set ${projectId} ${key_name}`;
+        : `Store the new value via MCP: call devassets_set_secret(project="${projectId}", key="${key_name}", value="<new-value>") — or CLI: devassets set ${projectId} ${key_name}`;
       const steps = [
         `Generate a new ${key_name} in the relevant service dashboard`,
         storeStep,
@@ -465,6 +468,29 @@ export async function startMcpServer() {
       addAuditLog({ projectId: '_global', action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
 
       return { content: [{ type: 'text', text: JSON.stringify({ stored: true, key, env, scope: 'global', message: `${key} stored in global vault [${env}]. Accessible via devassets_get_global_secret.` }) }] };
+    }
+  );
+
+  server.tool(
+    'devassets_set_secret',
+    'Store a project-scoped secret in the vault. Use this for credentials specific to one project (API keys, DB passwords, tokens). For credentials shared across multiple projects, use devassets_set_global_secret instead.',
+    {
+      project: z.string().describe('Project ID to store the secret under'),
+      key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. DATABASE_URL)'),
+      value: z.string().min(1).max(65536).describe('The secret value to store'),
+      env: z.string().optional().describe('Environment (default: local)'),
+      provider: z.string().optional().describe('Provider hint (e.g. supabase, neon, stripe)'),
+      account: z.string().optional().describe('Account/email hint for identity tracking'),
+    },
+    async ({ project: projectId, key, value, env = DEFAULT_ENV, provider, account }) => {
+      const project = getProject(projectId);
+      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+
+      setVaultSecret(projectId, env, key, value, { provider, account }, 'project');
+
+      addAuditLog({ projectId, action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'project', via: 'mcp' }, result: 'success' });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ stored: true, key, env, project: projectId, scope: 'project', message: `${key} stored in project vault [${projectId}/${env}]. Retrieve with devassets_get_secret.` }) }] };
     }
   );
 
