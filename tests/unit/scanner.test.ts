@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { scanProject } from '../../src/core/scanner.js';
+import { scanProject, scanSourceHardcoded } from '../../src/core/scanner.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -134,5 +134,78 @@ describe('scanProject — .devassets.yml managed locations (Axis B)', () => {
     const result = scanProject('mg', MG);
     const stripe = result.assets.find(a => a.name === 'STRIPE_SECRET_KEY');
     expect(stripe?.status).toBe('missing');
+  });
+});
+
+describe('scanSourceHardcoded — hardcoded secret detection', () => {
+  const SRC_PROJECT = path.join(os.tmpdir(), 'devassets-test-source-scan');
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(SRC_PROJECT, 'src'), { recursive: true });
+
+    // Stripe live key — must be detected
+    fs.writeFileSync(path.join(SRC_PROJECT, 'src', 'config.ts'), [
+      'export const stripe = require("stripe");',
+      'const STRIPE_KEY = "sk_live_abcdefghijklmnopqrstuvwx";',
+      'module.exports = { stripe };',
+    ].join('\n'));
+
+    // AWS access key — must be detected
+    fs.writeFileSync(path.join(SRC_PROJECT, 'src', 'aws.js'), [
+      'const accessKeyId = "AKIAIOSFODNN7EXAMPLE";',
+      'const region = "us-east-1";',
+    ].join('\n'));
+
+    // Assignment pattern — must be detected
+    fs.writeFileSync(path.join(SRC_PROJECT, 'src', 'auth.py'), [
+      'client_secret = "realClientSecret123456789"',
+      'redirect_uri = "http://localhost:3000/callback"',
+    ].join('\n'));
+
+    // Placeholder — must NOT be detected
+    fs.writeFileSync(path.join(SRC_PROJECT, 'src', 'example.ts'), [
+      'const API_KEY = "your_api_key_here_replace_me";',
+      'const SECRET = "<replace-with-your-secret>";',
+    ].join('\n'));
+
+    // .devassetsignore — suppresses aws.js
+    fs.writeFileSync(path.join(SRC_PROJECT, '.devassetsignore'), 'src/aws.js\n');
+  });
+
+  afterAll(() => fs.rmSync(SRC_PROJECT, { recursive: true, force: true }));
+
+  it('detects Stripe live key in source file', () => {
+    const findings = scanSourceHardcoded(SRC_PROJECT);
+    expect(findings.some(f => f.pattern === 'stripe' && f.file.includes('config.ts'))).toBe(true);
+  });
+
+  it('masks the detected value (does not expose full key)', () => {
+    const findings = scanSourceHardcoded(SRC_PROJECT);
+    const stripe = findings.find(f => f.pattern === 'stripe');
+    expect(stripe?.match).toBe('sk_liv****');
+    expect(stripe?.match).not.toContain('abcdefghijklmnopqrstuvwx');
+  });
+
+  it('detects assignment pattern in Python file', () => {
+    const findings = scanSourceHardcoded(SRC_PROJECT);
+    expect(findings.some(f => f.pattern === 'assignment' && f.file.includes('auth.py'))).toBe(true);
+  });
+
+  it('respects .devassetsignore — suppresses aws.js', () => {
+    const findings = scanSourceHardcoded(SRC_PROJECT);
+    expect(findings.some(f => f.file.includes('aws.js'))).toBe(false);
+  });
+
+  it('ignores placeholder values', () => {
+    const findings = scanSourceHardcoded(SRC_PROJECT);
+    expect(findings.some(f => f.file.includes('example.ts'))).toBe(false);
+  });
+
+  it('scanProject includes hardcodedFindings in result', () => {
+    // Need a .env to satisfy scanner path check
+    fs.writeFileSync(path.join(SRC_PROJECT, '.env'), 'APP=test\n');
+    const result = scanProject('src-proj', SRC_PROJECT);
+    expect(Array.isArray(result.hardcodedFindings)).toBe(true);
+    expect(result.hardcodedFindings.some(f => f.pattern === 'stripe')).toBe(true);
   });
 });
