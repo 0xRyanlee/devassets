@@ -15,7 +15,7 @@ import { DEFAULT_ENV } from '../utils/constants.js';
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '1.11.0',
+    version: '1.12.20260618',
   });
 
   server.tool(

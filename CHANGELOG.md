@@ -5,6 +5,36 @@
 
 ---
 
+## [1.12.20260618] — 2026-06-18
+
+### Fixed
+- **CLI/MCP default env unified to `local`** via shared `DEFAULT_ENV` constant (`src/utils/constants.ts`).
+  Previously `set`/`get` CLI defaulted to `local` while MCP `get_secret`/`get_global_secret`/`set_global_secret`
+  defaulted to `production` — a silent mismatch. MCP not-found responses now include `alternateEnvs` hint
+  listing envs where the key actually exists.
+- **MCP `devassets_audit` project guard**: unknown project IDs now return `{error: "Project not found"}` instead of silent `[]`.
+- **MCP `devassets_rotate` bad tool reference**: rotate instructions referenced non-existent `devassets_set_secret`.
+  Tool now exists — see Added.
+- **MCP `list_projects`/`health` onboarding hint**: empty DB now returns an actionable message instead of `[]`.
+- **`deleteProject` cascade**: now explicitly deletes `secret_values`, `assets`, `payment_platforms`, `credential_identities`
+  before removing the project row (FK CASCADE was not PRAGMA-enabled).
+- **DB directory/file permissions**: `~/.devassets/` is now `chmod 0o700` and `devassets.db` is `chmod 0o600`
+  instead of relying on umask.
+
+### Added
+- **`devassets delete-project <id> [--force]`**: removes a project and all its vault data with interactive confirmation.
+- **MCP `devassets_set_secret`**: project-scoped write tool — agents can now store secrets for specific projects via MCP
+  (previously only global writes were MCP-accessible).
+- **Source-code hardcoded secret detection** (`src/core/scanner.ts`): `scanSourceHardcoded()` walks `.ts/.js/.py/.rb/.go`
+  files with 7 provider-specific patterns (Stripe, AWS, GitHub, Slack, Anthropic, Google, Paddle) and an assignment pattern
+  for secret-named variables. Values are masked (`sk_liv****`). Suppresses placeholder values and respects `.devassetsignore`.
+  `ScanResult` now includes `hardcodedFindings[]`; `devassets scan` displays findings with file:line.
+
+### Removed
+- `src/commands/ui.ts`: dead web UI code from v0.10.0 (dependencies already removed, command was never registered).
+
+---
+
 ## [1.11.20260611] — 2026-06-11
 
 ### Added
