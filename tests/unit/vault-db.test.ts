@@ -28,6 +28,7 @@ import { closeDb } from '../../src/db/index.js';
 import {
   setVaultSecret,
   getVaultSecret,
+  getVaultSecretWithMeta,
   listVaultSecrets,
   findSecretAcrossProjects,
   getVaultSecretFallback,
@@ -199,5 +200,42 @@ describe('DEFAULT_ENV consistency — CLI/MCP env parity', () => {
   it('findSecretAcrossProjects finds key stored in DEFAULT_ENV regardless of queried env', () => {
     const matches = findSecretAcrossProjects('ENV_PARITY_KEY');
     expect(matches.some(m => m.env === DEFAULT_ENV)).toBe(true);
+  });
+});
+
+describe('file-type secret round-trip (encoding metadata)', () => {
+  it('text secret defaults to utf8 encoding', () => {
+    setVaultSecret('proj-a', 'local', 'TEXT_FILE_KEY', 'hello from text file', { encoding: 'utf8', filename: 'config.txt' }, 'project');
+    const meta = getVaultSecretWithMeta('proj-a', 'local', 'TEXT_FILE_KEY');
+    expect(meta).toBeDefined();
+    expect(meta?.value).toBe('hello from text file');
+    expect(meta?.encoding).toBe('utf8');
+    expect(meta?.originalFilename).toBe('config.txt');
+  });
+
+  it('binary secret stored as base64 round-trips correctly', () => {
+    const binaryData = Buffer.from([0x00, 0x01, 0x02, 0xFF, 0xFE, 0xAB, 0xCD]);
+    const b64 = binaryData.toString('base64');
+    setVaultSecret('proj-a', 'local', 'BINARY_KEY', b64, { encoding: 'base64', filename: 'AuthKey.p8' }, 'project');
+    const meta = getVaultSecretWithMeta('proj-a', 'local', 'BINARY_KEY');
+    expect(meta?.encoding).toBe('base64');
+    expect(meta?.originalFilename).toBe('AuthKey.p8');
+    const recovered = Buffer.from(meta!.value, 'base64');
+    expect(recovered.equals(binaryData)).toBe(true);
+  });
+
+  it('listVaultSecrets includes encoding and originalFilename fields', () => {
+    const secrets = listVaultSecrets('proj-a', 'local');
+    const binary = secrets.find(s => s.key === 'BINARY_KEY');
+    expect(binary?.encoding).toBe('base64');
+    expect(binary?.originalFilename).toBe('AuthKey.p8');
+    const text = secrets.find(s => s.key === 'TEXT_FILE_KEY');
+    expect(text?.encoding).toBe('utf8');
+  });
+
+  it('existing string secrets default to utf8 encoding with no filename', () => {
+    const meta = getVaultSecretWithMeta('proj-a', 'local', 'STRIPE_KEY');
+    expect(meta?.encoding).toBe('utf8');
+    expect(meta?.originalFilename).toBeUndefined();
   });
 });

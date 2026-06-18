@@ -127,4 +127,8 @@ function runMigrations(db: DatabaseSync) {
   } catch {
     // column already exists
   }
+
+  // Idempotent additions for file-type secret support
+  try { db.exec(`ALTER TABLE secret_values ADD COLUMN encoding TEXT NOT NULL DEFAULT 'utf8'`); } catch { /* exists */ }
+  try { db.exec(`ALTER TABLE secret_values ADD COLUMN original_filename TEXT`); } catch { /* exists */ }
 }
