@@ -220,6 +220,8 @@ export interface VaultSecretMeta {
   provider?: string;
   accountHint?: string;
   workspaceHint?: string;
+  encoding: 'utf8' | 'base64';
+  originalFilename?: string;
   updatedAt: string;
 }
 
@@ -228,7 +230,7 @@ export function setVaultSecret(
   env: string,
   key: string,
   plaintext: string,
-  hints?: { provider?: string; account?: string; workspace?: string },
+  hints?: { provider?: string; account?: string; workspace?: string; encoding?: 'utf8' | 'base64'; filename?: string },
   scope: 'global' | 'project' = 'project',
 ) {
   const db = getDb();
@@ -237,13 +239,14 @@ export function setVaultSecret(
   const now = new Date().toISOString();
   // Single atomic upsert — avoids SELECT+INSERT/UPDATE race condition under parallel invocations
   db.prepare(
-    `INSERT INTO secret_values (id, project_id, env, key, encrypted_value, iv, auth_tag, provider, account_hint, workspace_hint, scope, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO secret_values (id, project_id, env, key, encrypted_value, iv, auth_tag, provider, account_hint, workspace_hint, scope, encoding, original_filename, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(project_id, env, key) DO UPDATE SET
        encrypted_value=excluded.encrypted_value, iv=excluded.iv, auth_tag=excluded.auth_tag,
        provider=excluded.provider, account_hint=excluded.account_hint, workspace_hint=excluded.workspace_hint,
-       scope=excluded.scope, updated_at=excluded.updated_at`,
-  ).run(randomUUID(), effectiveProjectId, env, key, ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, scope, now, now);
+       scope=excluded.scope, encoding=excluded.encoding, original_filename=excluded.original_filename,
+       updated_at=excluded.updated_at`,
+  ).run(randomUUID(), effectiveProjectId, env, key, ciphertext, iv, authTag, hints?.provider ?? null, hints?.account ?? null, hints?.workspace ?? null, scope, hints?.encoding ?? 'utf8', hints?.filename ?? null, now, now);
 }
 
 export function getVaultSecret(projectId: string, env: string, key: string): string | undefined {
@@ -257,19 +260,36 @@ export function getVaultSecret(projectId: string, env: string, key: string): str
   }
 }
 
+export function getVaultSecretWithMeta(projectId: string, env: string, key: string): { value: string; encoding: 'utf8' | 'base64'; originalFilename?: string } | undefined {
+  const db = getDb();
+  const r = db.prepare('SELECT encrypted_value, iv, auth_tag, encoding, original_filename FROM secret_values WHERE project_id=? AND env=? AND key=?').get(projectId, env, key) as Row | undefined;
+  if (!r) return undefined;
+  try {
+    const value = decryptVault(r['encrypted_value'] as string, r['iv'] as string, r['auth_tag'] as string);
+    return {
+      value,
+      encoding: ((r['encoding'] as string) === 'base64' ? 'base64' : 'utf8'),
+      originalFilename: (r['original_filename'] as string) ?? undefined,
+    };
+  } catch {
+    throw new Error(`Decryption failed for ${key} [${env}]. The vault key may have changed. Re-store with: devassets set ${projectId} ${key}`);
+  }
+}
+
 export function listVaultSecrets(projectId: string, env?: string, scope?: SecretScope): VaultSecretMeta[] {
   const db = getDb();
   // global-scoped secrets only exist under _global — ignore caller's projectId
   const effectiveProjectId = scope === 'global' ? '_global' : projectId;
+  const cols = 'key, env, scope, provider, account_hint, workspace_hint, encoding, original_filename, updated_at';
   let rows: Row[];
   if (env && scope) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? AND scope=? ORDER BY env, key').all(effectiveProjectId, env, scope) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE project_id=? AND env=? AND scope=? ORDER BY env, key`).all(effectiveProjectId, env, scope) as Row[];
   } else if (env) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND env=? ORDER BY env, key').all(effectiveProjectId, env) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE project_id=? AND env=? ORDER BY env, key`).all(effectiveProjectId, env) as Row[];
   } else if (scope) {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? AND scope=? ORDER BY env, key').all(effectiveProjectId, scope) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE project_id=? AND scope=? ORDER BY env, key`).all(effectiveProjectId, scope) as Row[];
   } else {
-    rows = db.prepare('SELECT key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE project_id=? ORDER BY env, key').all(effectiveProjectId) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE project_id=? ORDER BY env, key`).all(effectiveProjectId) as Row[];
   }
   return rows.map(r => ({
     key: r['key'] as string,
@@ -278,6 +298,8 @@ export function listVaultSecrets(projectId: string, env?: string, scope?: Secret
     provider: (r['provider'] as string) ?? undefined,
     accountHint: (r['account_hint'] as string) ?? undefined,
     workspaceHint: (r['workspace_hint'] as string) ?? undefined,
+    encoding: ((r['encoding'] as string) === 'base64' ? 'base64' : 'utf8'),
+    originalFilename: (r['original_filename'] as string) ?? undefined,
     updatedAt: r['updated_at'] as string,
   }));
 }
@@ -297,15 +319,16 @@ export function deleteVaultSecret(projectId: string, env: string, key: string): 
 // Search across ALL projects' vaults by key name — returns metadata only, never plaintext values.
 export function findSecretAcrossProjects(key: string, env?: string, scope?: SecretScope): Array<VaultSecretMeta & { projectId: string }> {
   const db = getDb();
+  const cols = 'project_id, key, env, scope, provider, account_hint, workspace_hint, encoding, original_filename, updated_at';
   let rows: Row[];
   if (env && scope) {
-    rows = db.prepare('SELECT project_id, key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? AND env=? AND scope=? ORDER BY project_id, env').all(key, env, scope) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE key=? AND env=? AND scope=? ORDER BY project_id, env`).all(key, env, scope) as Row[];
   } else if (env) {
-    rows = db.prepare('SELECT project_id, key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? AND env=? ORDER BY project_id, env').all(key, env) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE key=? AND env=? ORDER BY project_id, env`).all(key, env) as Row[];
   } else if (scope) {
-    rows = db.prepare('SELECT project_id, key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? AND scope=? ORDER BY project_id, env').all(key, scope) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE key=? AND scope=? ORDER BY project_id, env`).all(key, scope) as Row[];
   } else {
-    rows = db.prepare('SELECT project_id, key, env, scope, provider, account_hint, workspace_hint, updated_at FROM secret_values WHERE key=? ORDER BY project_id, env').all(key) as Row[];
+    rows = db.prepare(`SELECT ${cols} FROM secret_values WHERE key=? ORDER BY project_id, env`).all(key) as Row[];
   }
   return rows.map(r => ({
     projectId: r['project_id'] as string,
@@ -315,6 +338,8 @@ export function findSecretAcrossProjects(key: string, env?: string, scope?: Secr
     provider: (r['provider'] as string) ?? undefined,
     accountHint: (r['account_hint'] as string) ?? undefined,
     workspaceHint: (r['workspace_hint'] as string) ?? undefined,
+    encoding: ((r['encoding'] as string) === 'base64' ? 'base64' : 'utf8') as 'utf8' | 'base64',
+    originalFilename: (r['original_filename'] as string) ?? undefined,
     updatedAt: r['updated_at'] as string,
   }));
 }

@@ -1,4 +1,6 @@
 import readline from 'readline';
+import fs from 'fs';
+import path from 'path';
 import { getProject, setVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
@@ -9,6 +11,15 @@ interface SetOptions {
   env?: string;
   provider?: string;
   account?: string;
+  file?: string;
+}
+
+function isBinaryBuffer(buf: Buffer): boolean {
+  // Heuristic: presence of null bytes or high proportion of non-printable bytes → binary
+  for (let i = 0; i < Math.min(buf.length, 8192); i++) {
+    if (buf[i] === 0) return true;
+  }
+  return false;
 }
 
 export async function setCommand(projectId: string, key: string, value: string | undefined, options: SetOptions) {
@@ -20,24 +31,47 @@ export async function setCommand(projectId: string, key: string, value: string |
   }
 
   const env = options.env ?? DEFAULT_ENV;
-  let secretValue = value;
+  let secretValue: string;
+  let encoding: 'utf8' | 'base64' = 'utf8';
+  let filename: string | undefined;
 
-  // Warn when value is passed as a CLI argument — it will appear in shell history
-  if (secretValue && !isCI()) {
-    process.stderr.write(`  Warning: secret value visible in shell history. Omit the value to use masked interactive input.\n`);
-  }
-
-  if (!secretValue) {
-    secretValue = await promptSecret(`Enter value for ${key} (${env}): `);
-    if (!secretValue || secretValue.trim() === '') {
-      logger.error('No value provided.');
+  if (options.file) {
+    const filePath = path.resolve(options.file);
+    if (!fs.existsSync(filePath)) {
+      logger.error(`File not found: ${filePath}`);
       process.exit(1);
     }
+    const buf = fs.readFileSync(filePath);
+    filename = path.basename(filePath);
+    if (isBinaryBuffer(buf)) {
+      encoding = 'base64';
+      secretValue = buf.toString('base64');
+    } else {
+      encoding = 'utf8';
+      secretValue = buf.toString('utf8');
+    }
+    logger.info(`Loading ${filename} (${encoding}) → ${key} [${env}]`);
+  } else {
+    let rawValue = value;
+    // Warn when value is passed as a CLI argument — it will appear in shell history
+    if (rawValue && !isCI()) {
+      process.stderr.write(`  Warning: secret value visible in shell history. Omit the value to use masked interactive input.\n`);
+    }
+    if (!rawValue) {
+      rawValue = await promptSecret(`Enter value for ${key} (${env}): `);
+      if (!rawValue || rawValue.trim() === '') {
+        logger.error('No value provided.');
+        process.exit(1);
+      }
+    }
+    secretValue = rawValue;
   }
 
   setVaultSecret(projectId, env, key, secretValue, {
     provider: options.provider,
     account: options.account,
+    encoding,
+    filename,
   }, projectId === '_global' ? 'global' : 'project');
 
   addAuditLog({
@@ -45,11 +79,12 @@ export async function setCommand(projectId: string, key: string, value: string |
     action: 'set',
     user: getCurrentUser(),
     timestamp: new Date().toISOString(),
-    details: { key, env },
+    details: { key, env, ...(filename ? { filename, encoding } : {}) },
     result: 'success',
   });
 
-  logger.success(`Stored ${key} for ${project.name} [${env}]`);
+  const fileHint = filename ? ` (file: ${filename})` : '';
+  logger.success(`Stored ${key} for ${project.name} [${env}]${fileHint}`);
 }
 
 function promptSecret(prompt: string): Promise<string> {

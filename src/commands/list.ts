@@ -45,8 +45,9 @@ export function listCommand(projectId: string, options: ListOptions) {
     if (!options.env) logger.raw(`  [${env}]`);
     for (const s of entries) {
       const hints = [s.provider, s.accountHint, s.workspaceHint].filter(Boolean).join(' · ');
+      const fileTag = s.encoding === 'base64' ? '[file/bin] ' : s.originalFilename ? '[file] ' : '';
       const updated = s.updatedAt.slice(0, 10);
-      logger.raw(`    ${s.key.padEnd(colWidth)}${hints ? `(${hints})  ` : ''}${updated}`);
+      logger.raw(`    ${s.key.padEnd(colWidth)}${fileTag}${hints ? `(${hints})  ` : ''}${updated}`);
     }
   }
   logger.raw('');

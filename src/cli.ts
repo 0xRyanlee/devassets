@@ -149,6 +149,7 @@ program
   .option('--env <env>', 'Environment (default: local)')
   .option('--provider <provider>', 'Provider hint (e.g. vercel, supabase)')
   .option('--account <account>', 'Account/email hint')
+  .option('--file <path>', 'Read secret value from file (binary auto-encoded as base64)')
   .action(setCommand);
 
 program
@@ -156,6 +157,8 @@ program
   .description('Retrieve a secret value (use _global as project for account-level credentials)')
   .option('--env <env>', 'Environment (default: local)')
   .option('--raw', 'No trailing newline (safe for subshell capture)')
+  .option('--out <path>', 'Materialize to file (creates parent dirs, mode 0600 by default)')
+  .option('--mode <octal>', 'File permission for --out (default: 600)')
   .action(getCommand);
 
 program
