@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import crypto from 'crypto';
 import * as supabase from '../../src/integrations/providers/supabase.js';
 import * as gcloud from '../../src/integrations/providers/gcloud.js';
 import * as vercel from '../../src/integrations/providers/vercel.js';
 import * as npm from '../../src/integrations/providers/npm.js';
+import * as apple from '../../src/integrations/providers/apple.js';
 import { matchProvider } from '../../src/integrations/providers/index.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -86,5 +88,155 @@ describe('npm.resolve (mocked)', () => {
     const r = await npm.resolve('tok');
     expect(r.valid).toBe(true);
     expect(r.account).toBe('ryan910814');
+  });
+});
+
+describe('apple.resolveKeyId (offline)', () => {
+  it('accepts valid 10-char uppercase alphanumeric key ID', async () => {
+    const r = await apple.resolveKeyId('ABCD1234EF');
+    expect(r.valid).toBe(true);
+    expect(r.account).toBe('ABCD1234EF');
+  });
+
+  it('rejects lowercase', async () => {
+    const r = await apple.resolveKeyId('abcd1234ef');
+    expect(r.valid).toBe(false);
+  });
+
+  it('rejects wrong length', async () => {
+    const r = await apple.resolveKeyId('ABCD123');
+    expect(r.valid).toBe(false);
+  });
+
+  it('trims surrounding whitespace', async () => {
+    const r = await apple.resolveKeyId('  ABCD1234EF  ');
+    expect(r.valid).toBe(true);
+    expect(r.account).toBe('ABCD1234EF');
+  });
+});
+
+describe('apple.resolveIssuerId (offline)', () => {
+  it('accepts valid UUID', async () => {
+    const r = await apple.resolveIssuerId('12345678-1234-1234-1234-1234567890ab');
+    expect(r.valid).toBe(true);
+  });
+
+  it('rejects non-UUID string', async () => {
+    const r = await apple.resolveIssuerId('not-a-uuid');
+    expect(r.valid).toBe(false);
+  });
+
+  it('rejects UUID with wrong segment lengths', async () => {
+    const r = await apple.resolveIssuerId('1234-1234-1234-1234-1234');
+    expect(r.valid).toBe(false);
+  });
+});
+
+describe('apple.resolveTeamId (offline)', () => {
+  it('accepts valid 10-char team ID', async () => {
+    const r = await apple.resolveTeamId('TEAM123456');
+    expect(r.valid).toBe(true);
+    expect(r.workspace).toBe('TEAM123456');
+  });
+
+  it('rejects team ID with special characters', async () => {
+    const r = await apple.resolveTeamId('TEAM_12345');
+    expect(r.valid).toBe(false);
+  });
+});
+
+describe('apple.resolveP8Key (offline, no env vars)', () => {
+  const fakePem = [
+    '-----BEGIN PRIVATE KEY-----',
+    'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgevZzL1gdAFr88hD2',
+    '-----END PRIVATE KEY-----',
+  ].join('\n');
+
+  beforeEach(() => {
+    delete process.env.APPLE_KEY_ID;
+    delete process.env.APPLE_ISSUER_ID;
+  });
+
+  it('accepts PEM without env vars (format-only pass)', async () => {
+    const r = await apple.resolveP8Key(fakePem);
+    expect(r.valid).toBe(true);
+  });
+
+  it('accepts base64-encoded PEM', async () => {
+    const b64 = Buffer.from(fakePem).toString('base64');
+    const r = await apple.resolveP8Key(b64);
+    expect(r.valid).toBe(true);
+  });
+
+  it('rejects garbage value', async () => {
+    const r = await apple.resolveP8Key('not-a-pem-at-all-12345');
+    expect(r.valid).toBe(false);
+  });
+});
+
+describe('apple.resolveP8Key (mocked API)', () => {
+  const fakePem = [
+    '-----BEGIN PRIVATE KEY-----',
+    'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgevZzL1gdAFr88hD2',
+    '-----END PRIVATE KEY-----',
+  ].join('\n');
+
+  beforeEach(() => {
+    process.env.APPLE_KEY_ID = 'ABCD1234EF';
+    process.env.APPLE_ISSUER_ID = '12345678-1234-1234-1234-1234567890ab';
+    process.env.APPLE_TEAM_ID = 'TEAM123456';
+  });
+
+  afterEach(() => {
+    delete process.env.APPLE_KEY_ID;
+    delete process.env.APPLE_ISSUER_ID;
+    delete process.env.APPLE_TEAM_ID;
+  });
+
+  it('returns valid with account+workspace on API success', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) }));
+    // Need a real signable key — skip crypto sign, just verify it reaches the API path
+    // Use a real P-256 key generated inline
+    const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const r = await apple.resolveP8Key(pem);
+    expect(r.valid).toBe(true);
+    expect(r.account).toBe('ABCD1234EF');
+    expect(r.workspace).toBe('TEAM123456');
+  });
+
+  it('returns invalid on API 401', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+    const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const r = await apple.resolveP8Key(pem);
+    expect(r.valid).toBe(false);
+    expect(r.error).toContain('401');
+  });
+});
+
+describe('provider registry — apple keys', () => {
+  it('matches APPLE_KEY_ID to apple provider', () => {
+    expect(matchProvider('APPLE_KEY_ID')?.provider).toBe('apple');
+  });
+
+  it('matches APPLE_ISSUER_ID to apple provider', () => {
+    expect(matchProvider('APPLE_ISSUER_ID')?.provider).toBe('apple');
+  });
+
+  it('matches APPLE_TEAM_ID to apple provider', () => {
+    expect(matchProvider('APPLE_TEAM_ID')?.provider).toBe('apple');
+  });
+
+  it('matches APPLE_API_KEY to apple provider', () => {
+    expect(matchProvider('APPLE_API_KEY')?.provider).toBe('apple');
+  });
+
+  it('matches APPLE_PRIVATE_KEY_P8 to apple provider', () => {
+    expect(matchProvider('APPLE_PRIVATE_KEY_P8')?.provider).toBe('apple');
+  });
+
+  it('matches APPLE_NOTARY_KEY to apple provider', () => {
+    expect(matchProvider('APPLE_NOTARY_KEY')?.provider).toBe('apple');
   });
 });
