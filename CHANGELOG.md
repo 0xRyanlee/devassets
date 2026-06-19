@@ -29,6 +29,14 @@
   files with 7 provider-specific patterns (Stripe, AWS, GitHub, Slack, Anthropic, Google, Paddle) and an assignment pattern
   for secret-named variables. Values are masked (`sk_liv****`). Suppresses placeholder values and respects `.devassetsignore`.
   `ScanResult` now includes `hardcodedFindings[]`; `devassets scan` displays findings with file:line.
+- **File-type secrets** (`set --file`, `get --out`): store binary or text files (`.p8`, keystores, GCP JSON, SSH keys)
+  directly in the vault. Binary files detected via null-byte heuristic → stored as base64; text as UTF-8.
+  `get --out <path>` materializes at `chmod 0600`; `--mode <octal>` overrides. `list` tags entries `[file]`/`[file/bin]`.
+  Two new columns (`encoding`, `original_filename`) added via idempotent migrations; `getVaultSecretWithMeta()` exposes them.
+- **Apple provider identity resolution** (`src/integrations/providers/apple.ts`): validates `APPLE_KEY_ID` (10-char),
+  `APPLE_ISSUER_ID` (UUID), `APPLE_TEAM_ID` (10-char), and `.p8` key names (PEM/base64-PEM; readonly App Store Connect
+  API confirmation when `APPLE_KEY_ID` + `APPLE_ISSUER_ID` are present). ES256 JWT signed with `ieee-p1363` encoding.
+  Six `APPLE_*` patterns registered in provider registry.
 
 ### Removed
 - `src/commands/ui.ts`: dead web UI code from v0.10.0 (dependencies already removed, command was never registered).
