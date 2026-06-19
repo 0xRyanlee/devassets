@@ -213,6 +213,46 @@ When you call `devassets get <project> <key>` for a project-specific key and it'
 
 > `_global` is a reserved project ID — `devassets add-project` will reject it.
 
+#### File & signing credentials
+
+DevAssets stores not just string tokens but also **file-type secrets**: `.p8` private keys, Android keystores, GCP service-account JSON, SSH keys, and any other file whose content needs to stay out of your repository and off cloud sync.
+
+```bash
+# Store a file — DevAssets auto-detects binary vs. text
+devassets set myapp APPLE_NOTARY_KEY --file ~/AuthKey_ABCD1234EF.p8
+devassets set myapp GCP_SA_KEY       --file ~/service-account.json
+devassets set myapp ANDROID_KEYSTORE --file ~/release.jks
+devassets set myapp SSH_DEPLOY_KEY   --file ~/.ssh/id_ed25519
+
+# Materialize back to a file at 0600 permissions
+devassets get myapp APPLE_NOTARY_KEY --out /tmp/AuthKey.p8
+devassets get myapp ANDROID_KEYSTORE --out ~/build/release.jks
+```
+
+Binary files are stored as base64 and decoded transparently on `--out`. Text files (JSON, PEM, etc.) round-trip as UTF-8. `devassets list` tags file-type secrets with `[file]` or `[file/bin]`.
+
+**Apple signing credentials** are identity-resolved by format when stored:
+
+| Key name | What DevAssets resolves |
+|---|---|
+| `APPLE_KEY_ID` | Validates 10-char alphanumeric format |
+| `APPLE_ISSUER_ID` | Validates UUID format |
+| `APPLE_TEAM_ID` | Validates 10-char format; stored as workspace |
+| `APPLE_API_KEY`, `APPLE_NOTARY_KEY`, `APPLE_PRIVATE_KEY_P8` | Validates PEM/base64-PEM; if `APPLE_KEY_ID` + `APPLE_ISSUER_ID` are present, makes a readonly App Store Connect API call to confirm the key is active |
+
+```bash
+# Store Apple credentials (set APPLE_KEY_ID and APPLE_ISSUER_ID first for API validation)
+devassets set myapp APPLE_KEY_ID    ABCD1234EF
+devassets set myapp APPLE_ISSUER_ID 12345678-1234-1234-1234-1234567890ab
+devassets set myapp APPLE_TEAM_ID   TEAM123456
+devassets set myapp APPLE_NOTARY_KEY --file ~/AuthKey_ABCD1234EF.p8
+
+# Confirm the key is active
+devassets identity myapp
+```
+
+> **Security note:** materialized files are written with `chmod 0600`. DevAssets never logs or transmits private key content — only identity metadata (key ID, team ID) is recorded.
+
 ### Credential management
 
 | Command | Description |
@@ -270,6 +310,7 @@ DevAssets stores secrets locally on your machine with no external service involv
 | npm | `NPM_TOKEN`, `NODE_AUTH_TOKEN` | username |
 | Google Cloud | `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_SERVICE_ACCOUNT` | service account email + project (parsed offline) |
 | Stripe / Paddle | `STRIPE_SECRET_KEY`, `PADDLE_API_KEY` | key status + webhook check |
+| Apple | `APPLE_KEY_ID`, `APPLE_ISSUER_ID`, `APPLE_TEAM_ID`, `APPLE_*_KEY*` | format validation offline; `.p8` keys optionally validated against App Store Connect API (readonly) |
 
 Pin the expected account/workspace with `--pin`. Every subsequent `identity` run compares against the pin and warns on drift.
 
@@ -413,6 +454,7 @@ DevAssets 用一個 CLI 解決這些問題：
 - **`devassets run myapp -- npm run migrate`** — 自動注入 secret 到子命令，不經過 shell 歷史記錄
 - **`devassets identity myapp`** — 自動解析每個 token 屬於哪個帳號，偵測 staging/prod 帳號混用（業界唯一）
 - **`devassets check myapp --fail-on-risk`** — 部署前阻擋缺少的必要 secret，適合 CI 使用
+- **檔案/簽名型憑證** — `set --file` 儲存 `.p8`、Android keystore、GCP JSON、SSH key；`get --out` 還原為 0600 檔案；Apple 金鑰格式驗證 + App Store Connect 唯讀確認
 - **MCP 整合（AI-native）** — Claude Code / Cursor agent 可直接查詢憑證健康狀態，無需切換 terminal
 
 **vs. 競品：** Doppler 和 1Password CLI 需要帳號和月費，data 存在對方的雲端。direnv 無加密。Infisical 需要自架 server。DevAssets 是唯一零雲依賴 + 身份解析 + MCP 原生的選項。
@@ -438,6 +480,7 @@ DevAssets はこれを解決します：
 - **`devassets run myapp -- node server.js`** — シークレットをサブコマンドに直接注入（シェル履歴に残らない）
 - **`devassets identity myapp`** — 各トークンがどのアカウント/ワークスペースに属するか自動解決。ステージング/本番の混在を検知
 - **`devassets check myapp --fail-on-risk`** — デプロイ前に必須シークレットの欠如をブロック（CI対応）
+- **ファイル型シークレット** — `set --file` で `.p8`・Android キーストア・GCP JSON・SSH 鍵を保管；`get --out` でパーミッション 0600 のファイルとして復元；Apple 鍵はフォーマット検証 + App Store Connect 読み取り専用確認
 - **MCP サーバー** — Claude Code / Cursor からエージェントが直接クレデンシャルを管理
 
 ```bash
@@ -461,6 +504,7 @@ DevAssets résout ces problèmes :
 - **`devassets run myapp -- npm run migrate`** — injecte les secrets dans les sous-commandes sans passer par l'historique du shell
 - **`devassets identity myapp`** — résout automatiquement à quel compte/espace de travail appartient chaque token. Détecte les mélanges staging/production
 - **`devassets check myapp --fail-on-risk`** — bloque les déploiements si des secrets requis sont manquants (intégration CI)
+- **Secrets de type fichier** — `set --file` stocke les clés `.p8`, keystores Android, JSON GCP, clés SSH ; `get --out` les matérialise en fichiers 0600 ; les clés Apple sont validées par format + confirmation App Store Connect en lecture seule
 - **Serveur MCP** — les agents Claude Code / Cursor peuvent interroger directement l'état des identifiants
 
 ```bash
@@ -484,6 +528,7 @@ DevAssets risolve questi problemi:
 - **`devassets run myapp -- npm run migrate`** — inietta i segreti nei sottocomandi senza passare per la cronologia della shell
 - **`devassets identity myapp`** — risolve automaticamente a quale account/workspace appartiene ogni token. Rileva confusioni tra staging e produzione
 - **`devassets check myapp --fail-on-risk`** — blocca i deploy se mancano segreti richiesti (integrabile in CI)
+- **Segreti di tipo file** — `set --file` archivia chiavi `.p8`, keystore Android, JSON GCP, chiavi SSH; `get --out` li materializza come file con permessi 0600; le chiavi Apple vengono validate per formato + conferma App Store Connect in sola lettura
 - **Server MCP** — gli agenti Claude Code / Cursor possono interrogare direttamente lo stato delle credenziali
 
 ```bash
