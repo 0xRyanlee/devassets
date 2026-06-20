@@ -1,6 +1,6 @@
 {
   "name": "@hyphen-network/devassets",
-  "version": "1.13.260619",
+  "version": "1.14.260621",
   "description": "Local-first developer secrets manager — store encrypted env vars, manage API keys across projects, resolve provider identities, and inject secrets into commands. CLI + MCP server. No cloud, no account.",
   "type": "module",
   "bin": {
