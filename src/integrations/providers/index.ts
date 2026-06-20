@@ -4,6 +4,7 @@ import * as supabase from './supabase.js';
 import * as neon from './neon.js';
 import * as npm from './npm.js';
 import * as gcloud from './gcloud.js';
+import * as apple from './apple.js';
 
 interface ProviderEntry {
   provider: string;
@@ -19,6 +20,10 @@ export const PROVIDERS: ProviderEntry[] = [
   { provider: 'neon', keyPattern: /^NEON_API_KEY$/i, resolve: neon.resolve },
   { provider: 'npm', keyPattern: /^(NPM_TOKEN|NODE_AUTH_TOKEN)$/i, resolve: npm.resolve },
   { provider: 'gcloud', keyPattern: /^(GOOGLE_APPLICATION_CREDENTIALS|GCP_SERVICE_ACCOUNT(_KEY)?|GOOGLE_CREDENTIALS)$/i, resolve: gcloud.resolve },
+  { provider: 'apple', keyPattern: /^APPLE_KEY_ID$/i, resolve: apple.resolveKeyId },
+  { provider: 'apple', keyPattern: /^APPLE_ISSUER_ID$/i, resolve: apple.resolveIssuerId },
+  { provider: 'apple', keyPattern: /^APPLE_TEAM_ID$/i, resolve: apple.resolveTeamId },
+  { provider: 'apple', keyPattern: /^APPLE_(NOTARY|API|PRIVATE)_KEY(_P8)?$/i, resolve: apple.resolveP8Key },
 ];
 
 export function matchProvider(keyName: string): ProviderEntry | undefined {
