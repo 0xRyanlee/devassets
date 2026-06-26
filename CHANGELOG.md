@@ -5,6 +5,25 @@
 
 ---
 
+## [1.14.20260621] — 2026-06-21
+
+### Fixed
+- **Apple provider implementation included**: `1.13.260619` was published without `apple.ts` (implementation file was uncommitted at publish time). `1.14` republishes with the full implementation present.
+
+### Added
+- **Apple provider** (`src/integrations/providers/apple.ts`): validates and resolves Apple credentials via four registered patterns — `APPLE_KEY_ID` (10-char), `APPLE_ISSUER_ID` (UUID), `APPLE_TEAM_ID` (10-char), and `APPLE_NOTARY_KEY_P8` / `APPLE_API_KEY_P8` / `APPLE_PRIVATE_KEY_P8` (`.p8` file patterns). ES256 JWT signing with `ieee-p1363` encoding; optional App Store Connect API confirmation when key ID + issuer ID are present.
+
+---
+
+## [1.13.20260619] — 2026-06-19
+
+> ⚠️ **Superseded by 1.14** — `apple.ts` was not included in the published package. Upgrade to `1.14.260621`.
+
+### Added
+- Apple provider + four APPLE\_\* key patterns registered in provider index. *(Not functional in this release — see 1.14.)*
+
+---
+
 ## [1.12.20260618] — 2026-06-18
 
 ### Fixed
