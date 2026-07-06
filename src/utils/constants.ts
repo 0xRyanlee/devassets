@@ -46,6 +46,40 @@ export function isSensitiveKey(name: string): boolean {
   return classifyKey(name) === 'secret';
 }
 
+// Known account/platform-level credentials: the same value is valid across every
+// project that uses that provider, because it authenticates to a shared account,
+// not to one application. Safe default candidates for `_global`.
+const GLOBAL_CANDIDATE_KEYS = new Set([
+  'VERCEL_TOKEN', 'NPM_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN',
+  'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY',
+  'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
+  'PADDLE_API_KEY', 'SUPABASE_ACCESS_TOKEN',
+  'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY',
+  'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY',
+]);
+
+// Patterns that are almost always one application's own identity or data, not a
+// shared account credential: a database connection, a signing key, a JWT/session
+// secret, a webhook secret bound to one endpoint. Storing these under `_global`
+// leaks them into every other project via the get/inject fallback chain
+// (primary → _global → other projects) — one app's signing key showing up in
+// another app's environment is a real incident waiting to happen, not a
+// hypothetical.
+const PROJECT_ONLY_PATTERN = /(DATABASE_URL|DIRECT_URL|_KEYSTORE|SIGNING_PRIVATE_KEY|JWT_|SESSION_SECRET|COOKIE_SECRET|WEBHOOK_SECRET|TOTP_|_ANON_KEY$|SERVICE_ROLE_KEY)/i;
+
+export type ScopeSuggestion = 'global' | 'project-only' | 'either';
+
+// Advisory only — never blocks a `set`, callers decide what to do with the hint.
+// Default posture is project scope; `_global` is the deliberate exception for
+// credentials that authenticate to a shared account/platform, not credentials
+// that ARE an application's own identity or data.
+export function suggestScope(name: string): ScopeSuggestion {
+  const upper = name.toUpperCase();
+  if (GLOBAL_CANDIDATE_KEYS.has(upper)) return 'global';
+  if (PROJECT_ONLY_PATTERN.test(name)) return 'project-only';
+  return 'either';
+}
+
 export const PAYMENT_PLATFORM_KEY_PATTERNS: Record<string, RegExp[]> = {
   paddle: [/^PADDLE_/i],
   stripe: [/^STRIPE_/i],

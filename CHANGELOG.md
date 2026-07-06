@@ -5,6 +5,15 @@
 
 ---
 
+## [1.15.260706] — 2026-07-06
+
+### Added
+- **`suggestScope(key)`** (`src/utils/constants.ts`): advisory classifier distinguishing account/platform-level credentials (safe default candidates for `_global`) from per-application secrets (database URLs, signing keys, JWT/session/webhook secrets) that should stay project-scoped. Never blocks a write — `devassets set` now prints a one-line hint in both directions when the key name matches a known pattern.
+- **README**: new "Choosing project vs. global" section makes the default explicit — project scope by default, `_global` only for credentials that authenticate to a shared account/platform. Fixed an existing MCP routing example that incorrectly listed `PADDLE_API_KEY` (account-level) as a project-specific example.
+
+### Why
+A live multi-project audit found `PADDLE_API_KEY` duplicated across three separate projects instead of stored once in `_global`, while at the same time the README's own MCP tool-routing table modeled `PADDLE_API_KEY` as a *project-specific* example — the documentation was itself teaching the wrong default. This release corrects the guidance and adds a lightweight runtime nudge so the same mistake doesn't require a manual audit to catch next time.
+
 ## [1.14.20260621] — 2026-06-21
 
 ### Fixed

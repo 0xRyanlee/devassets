@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyKey, isSensitiveKey } from '../../src/utils/constants.js';
+import { classifyKey, isSensitiveKey, suggestScope } from '../../src/utils/constants.js';
 
 describe('classifyKey', () => {
   it('public prefix overrides everything (even _KEY suffix)', () => {
@@ -46,5 +46,37 @@ describe('classifyKey', () => {
     expect(isSensitiveKey('NEXT_PUBLIC_SUPABASE_ANON_KEY')).toBe(false);
     expect(isSensitiveKey('GOOGLE_CLIENT_ID')).toBe(false);
     expect(isSensitiveKey('APP_NAME')).toBe(false);
+  });
+});
+
+describe('suggestScope', () => {
+  it('known account/platform credentials suggest global', () => {
+    expect(suggestScope('VERCEL_TOKEN')).toBe('global');
+    expect(suggestScope('ANTHROPIC_API_KEY')).toBe('global');
+    expect(suggestScope('CLOUDFLARE_API_TOKEN')).toBe('global');
+    expect(suggestScope('CLOUDFLARE_ACCOUNT_ID')).toBe('global');
+    expect(suggestScope('PADDLE_API_KEY')).toBe('global');
+    expect(suggestScope('SUPABASE_ACCESS_TOKEN')).toBe('global');
+    expect(suggestScope('R2_ACCESS_KEY_ID')).toBe('global');
+    // case-insensitive
+    expect(suggestScope('vercel_token')).toBe('global');
+  });
+
+  it('per-application secrets suggest project-only, even when they share a substring with a global key', () => {
+    expect(suggestScope('DATABASE_URL')).toBe('project-only');
+    expect(suggestScope('CUCKOO_TAURI_SIGNING_PRIVATE_KEY')).toBe('project-only');
+    expect(suggestScope('CUCKOO_ANDROID_KEYSTORE')).toBe('project-only');
+    expect(suggestScope('JWT_SECRET')).toBe('project-only');
+    expect(suggestScope('IRON_SESSION_PASSWORD')).not.toBe('global');
+    // same provider as a global key, but this one is endpoint-specific, not account-level
+    expect(suggestScope('PADDLE_WEBHOOK_SECRET')).toBe('project-only');
+    expect(suggestScope('SUPABASE_SERVICE_ROLE_KEY')).toBe('project-only');
+    expect(suggestScope('NEXT_PUBLIC_SUPABASE_ANON_KEY')).toBe('project-only');
+  });
+
+  it('unrecognized keys are either — no opinion, no warning', () => {
+    expect(suggestScope('APP_NAME')).toBe('either');
+    expect(suggestScope('GOOGLE_CLIENT_ID')).toBe('either');
+    expect(suggestScope('NEXT_PUBLIC_WORLD_APP_ID')).toBe('either');
   });
 });
