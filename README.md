@@ -213,6 +213,38 @@ When you call `devassets get <project> <key>` for a project-specific key and it'
 
 > `_global` is a reserved project ID — `devassets add-project` will reject it.
 
+#### Choosing project vs. global — the default is project scope
+
+**Project scope is the default. `_global` is the deliberate exception**, reserved for
+credentials that authenticate to a shared *account or platform* — not credentials that
+*are* one application's own identity or data. In a typical multi-project setup, most
+secrets in any given project are correctly project-scoped; only a handful are ever
+truly account-level.
+
+The test: would this exact value still be valid if you pasted it into a brand-new,
+unrelated project tomorrow?
+
+- **Yes → `_global`**: `VERCEL_TOKEN`, `NPM_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`, an R2 access key pair,
+  a Paddle seller API key, a Supabase account management token. These authenticate
+  *you* to a platform; the platform doesn't care which project is asking.
+- **No → project scope (the default)**: a database connection string, a JWT/session
+  signing secret, an app's Tauri/Android signing key, an OAuth client ID/secret
+  registered for one app's specific redirect URI, a webhook secret bound to one
+  endpoint (`PADDLE_WEBHOOK_SECRET` is *not* the same kind of thing as
+  `PADDLE_API_KEY` — same provider, different scope). These are the application's own
+  identity or data; a different project has no legitimate use for the same value.
+
+**Why this matters more than it looks like it should:** `get`/`inject`/`run` fall back
+to `_global` automatically. A project-specific secret stored under `_global` by
+mistake becomes silently readable from *every other project* the next time one of
+them calls `inject` or `run` — a signing key or session secret leaking across
+unrelated applications is a real security incident, not a hypothetical. `devassets
+set` prints an advisory hint in both directions (recommending `_global` for a
+recognized account-level key stored under a project; warning when a per-application
+pattern is stored under `_global`) — it never blocks the write, because the heuristic
+can't see your actual architecture, only the key's name.
+
 #### File & signing credentials
 
 DevAssets stores not just string tokens but also **file-type secrets**: `.p8` private keys, Android keystores, GCP service-account JSON, SSH keys, and any other file whose content needs to stay out of your repository and off cloud sync.
@@ -373,9 +405,9 @@ Available MCP tools:
 **Vault — secret retrieval (agent routing)**
 | Tool | When to use |
 |---|---|
-| `devassets_get_global_secret(key, env)` | Account-level credentials: `VERCEL_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN` |
-| `devassets_set_global_secret(key, value, env)` | Store an account-level credential (once, shared across all projects) |
-| `devassets_get_secret(project, key, env)` | Project-specific credentials: `DATABASE_URL`, `PADDLE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `devassets_get_global_secret(key, env)` | Account-level credentials: `VERCEL_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN`, `PADDLE_API_KEY`, `CLOUDFLARE_API_TOKEN` |
+| `devassets_set_global_secret(key, value, env)` | Store an account-level credential (once, shared across all projects) — see [Choosing project vs. global](#choosing-project-vs-global--the-default-is-project-scope) before defaulting here |
+| `devassets_get_secret(project, key, env)` | Project-specific credentials: `DATABASE_URL`, `PADDLE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, signing keys |
 | `devassets_list_secrets(project, env, scope)` | List keys; use `project="_global"` or `scope="global"` for account-level |
 | `devassets_find_secret(key, env, scope)` | Discover where a key is stored; `scope` filter narrows to global or project |
 

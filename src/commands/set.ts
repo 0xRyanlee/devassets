@@ -5,7 +5,7 @@ import { getProject, setVaultSecret } from '../db/queries.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 import { isCI } from '../utils/env.js';
-import { DEFAULT_ENV } from '../utils/constants.js';
+import { DEFAULT_ENV, suggestScope } from '../utils/constants.js';
 
 interface SetOptions {
   env?: string;
@@ -67,12 +67,21 @@ export async function setCommand(projectId: string, key: string, value: string |
     secretValue = rawValue;
   }
 
+  const isGlobal = projectId === '_global';
+  const scopeHint = suggestScope(key);
+  if (!isGlobal && scopeHint === 'global' && !isCI()) {
+    process.stderr.write(`  Hint: "${key}" looks like an account-level credential shared across projects. Consider: devassets set _global ${key}\n`);
+  }
+  if (isGlobal && scopeHint === 'project-only' && !isCI()) {
+    process.stderr.write(`  Warning: "${key}" looks like a per-application secret (DB connection, signing key, JWT/session/webhook secret), not an account-level credential. Storing it in _global makes it fall back into every other project's get/inject/run. Consider: devassets set <project> ${key}\n`);
+  }
+
   setVaultSecret(projectId, env, key, secretValue, {
     provider: options.provider,
     account: options.account,
     encoding,
     filename,
-  }, projectId === '_global' ? 'global' : 'project');
+  }, isGlobal ? 'global' : 'project');
 
   addAuditLog({
     projectId,
