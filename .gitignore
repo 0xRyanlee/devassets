@@ -9,3 +9,6 @@ ui/node_modules/
 *.db
 *.sqlite
 .claude/
+# Internal security/infra audit docs — contain unpatched-finding details, kept local-only
+# (repo is public; don't hand out a vulnerability roadmap via git history).
+docs/*AUDIT*.md
