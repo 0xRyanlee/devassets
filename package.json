@@ -15,14 +15,14 @@
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
-    "build:ui": "cd ui && npm run build",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run build && npm test"
+    "check:docs": "node scripts/check-docs-sync.mjs",
+    "prepublishOnly": "npm run build && npm test && npm run check:docs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

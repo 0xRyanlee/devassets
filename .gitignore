@@ -9,6 +9,3 @@ ui/node_modules/
 *.db
 *.sqlite
 .claude/
-# CI workflow deferred: requires GitHub token with workflow scope to push
-# Run: gh auth refresh -h github.com -s workflow && git add .github/ && git commit && git push
-.github/

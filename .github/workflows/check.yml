@@ -41,7 +41,7 @@ jobs:
           node-version: '22'
 
       - name: Install DevAssets
-        run: npm install -g @ryan910814/devassets
+        run: npm install -g @hyphen-network/devassets
 
       - name: Initialize DevAssets
         run: devassets init
