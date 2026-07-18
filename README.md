@@ -305,7 +305,6 @@ devassets identity myapp
 | `devassets add-project <name>` | Register a project |
 | `devassets doctor` | Global health report across all projects; `--fix` to re-scan |
 | `devassets portfolio` | Point-in-time snapshot of all projects under a root |
-| `devassets ui` | Start web dashboard at localhost:9090 |
 | `devassets serve` | Start MCP server (stdio) for Claude Code / Cursor |
 | `devassets status` | Compact overview of all projects — vault, assets, identity, age |
 | `devassets install-skills` | Install Claude Code slash commands |
@@ -341,10 +340,11 @@ DevAssets stores secrets locally on your machine with no external service involv
 | Neon | `NEON_API_KEY` | account + projects |
 | npm | `NPM_TOKEN`, `NODE_AUTH_TOKEN` | username |
 | Google Cloud | `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_SERVICE_ACCOUNT` | service account email + project (parsed offline) |
-| Stripe / Paddle | `STRIPE_SECRET_KEY`, `PADDLE_API_KEY` | key status + webhook check |
 | Apple | `APPLE_KEY_ID`, `APPLE_ISSUER_ID`, `APPLE_TEAM_ID`, `APPLE_*_KEY*` | format validation offline; `.p8` keys optionally validated against App Store Connect API (readonly) |
 
 Pin the expected account/workspace with `--pin`. Every subsequent `identity` run compares against the pin and warns on drift.
+
+Stripe and Paddle keys aren't resolved by `identity` — their key status and webhook health are checked by `devassets check` instead.
 
 ---
 
@@ -408,6 +408,7 @@ Available MCP tools:
 | `devassets_get_global_secret(key, env)` | Account-level credentials: `VERCEL_TOKEN`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN`, `PADDLE_API_KEY`, `CLOUDFLARE_API_TOKEN` |
 | `devassets_set_global_secret(key, value, env)` | Store an account-level credential (once, shared across all projects) — see [Choosing project vs. global](#choosing-project-vs-global--the-default-is-project-scope) before defaulting here |
 | `devassets_get_secret(project, key, env)` | Project-specific credentials: `DATABASE_URL`, `PADDLE_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, signing keys |
+| `devassets_set_secret(project, key, value, env)` | Store a project-scoped secret — see [Choosing project vs. global](#choosing-project-vs-global--the-default-is-project-scope) before defaulting here |
 | `devassets_list_secrets(project, env, scope)` | List keys; use `project="_global"` or `scope="global"` for account-level |
 | `devassets_find_secret(key, env, scope)` | Discover where a key is stored; `scope` filter narrows to global or project |
 
@@ -421,18 +422,6 @@ Available MCP tools:
 **Claude Code skills** (`devassets install-skills`): installs `/devassets-check` and `/devassets-ci` slash commands locally.
 
 ---
-
-## Web Dashboard (optional, not bundled)
-
-The web UI is intentionally excluded from the npm package to keep the CLI lean. If you want a browser-based view, build it locally from source:
-
-```bash
-git clone https://github.com/0xRyanlee/devassets
-cd devassets && npm install
-npm run build:ui        # builds ui/dist/
-npm run build           # builds CLI
-node dist/index.js serve  # MCP mode, or add your own ui server
-```
 
 For day-to-day use, `devassets status` gives a full terminal overview without a browser.
 

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { scheduleUpdateCheck } from './utils/update-check.js';
+import { VERSION } from './utils/version.js';
 import { initCommand } from './commands/init.js';
 import { addProjectCommand } from './commands/add-project.js';
 import { scanCommand } from './commands/scan.js';
@@ -28,8 +29,8 @@ const program = new Command();
 program
   .name('devassets')
   .description('Developer asset management for independent developers')
-  .version('1.12.20260618')
-  .hook('preAction', () => { scheduleUpdateCheck('1.12.20260618'); })
+  .version(VERSION)
+  .hook('preAction', () => { scheduleUpdateCheck(VERSION); })
   .action(() => statusCommand({}));
 
 program

@@ -13,7 +13,6 @@ devassets/
 │   ├── mcp/                   MCP server (12 tools) + skills loader
 │   ├── types/                 assets, export, identity
 │   └── utils/                 crypto, dotenv, constants (classifyKey), slug, spinner, logger
-├── ui/                        React 18 + Vite + Tailwind + shadcn/ui dashboard
 ├── skills/                    Claude Code slash commands (devassets-check, devassets-ci)
 ├── tests/                     vitest unit + integration
 └── docs/                      Design + research documents
@@ -27,8 +26,6 @@ devassets/
 | Language | TypeScript → ESM | Node 22.5+ |
 | Database | `node:sqlite` (built-in) | no native compile; `~/.devassets/devassets.db` |
 | MCP Server | `@modelcontextprotocol/sdk` | stdio transport |
-| Dashboard Backend | Express.js (127.0.0.1 only) | serves UI + REST API |
-| Dashboard Frontend | React 18 + Vite + Tailwind + shadcn/ui | compiled to `ui/dist/` |
 | Signing | HMAC-SHA256 (`node:crypto`) | key at `~/.devassets/signature.key` (0600, atomic) |
 | Encryption | AES-256-GCM (`node:crypto`) | scrypt N=65536 |
 

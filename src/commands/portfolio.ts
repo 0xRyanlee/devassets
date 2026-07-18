@@ -36,5 +36,5 @@ export function portfolioCommand(options: PortfolioCommandOptions) {
   logger.raw(`  Unpushed repos: ${report.summary.unpushedRepos}`);
   logger.raw(`  DevAssets scans: ${report.verification.scanSucceeded} passed, ${report.verification.scanFailed} failed`);
   logger.raw('');
-  logger.raw(`Next: open ${artifacts.current} or run devassets ui to browse the dashboard`);
+  logger.raw(`Next: open ${artifacts.current} for the full report`);
 }

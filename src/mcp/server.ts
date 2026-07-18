@@ -11,11 +11,12 @@ import { checkStripeStatus } from '../integrations/stripe.js';
 import { buildDoctorReport } from '../commands/doctor.js';
 import { generateCiSnippet } from '../core/ci.js';
 import { DEFAULT_ENV } from '../utils/constants.js';
+import { VERSION } from '../utils/version.js';
 
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
-    version: '1.12.20260618',
+    version: VERSION,
   });
 
   server.tool(
