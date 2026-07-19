@@ -34,7 +34,12 @@ const PLACEHOLDER_VALUE_RE = /^(?:your[_-]|<[^>]+>|example|placeholder|test|fake
 // Source file extensions to walk
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.rb', '.go']);
 // Directories that never contain project source
-const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.turbo', 'target', '__pycache__', '.cache', '.venv', 'vendor']);
+const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.turbo', 'target', '__pycache__', '.cache', '.venv', 'vendor', 'out', 'archive', 'tmp']);
+// Guards against pathologically deep/large trees inflating scan cost (and, for depth, against a
+// runaway symlink cycle) rather than aiming for a fixed cache — most real source trees are well
+// under both limits, so this doesn't reduce coverage for normal projects.
+const MAX_WALK_DEPTH = 12;
+const MAX_FILE_SIZE_BYTES = 512 * 1024;
 
 function maskValue(val: string): string {
   return val.slice(0, Math.min(6, val.length)) + '****';
@@ -50,7 +55,8 @@ function matchesIgnore(relPath: string, patterns: string[]): boolean {
   return patterns.some(pat => relPath === pat || relPath.startsWith(pat + '/') || relPath.includes('/' + pat));
 }
 
-function walkSourceFiles(dir: string, projectPath: string, ignore: string[]): string[] {
+function walkSourceFiles(dir: string, projectPath: string, ignore: string[], depth = 0): string[] {
+  if (depth > MAX_WALK_DEPTH) return [];
   const out: string[] = [];
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
@@ -58,7 +64,7 @@ function walkSourceFiles(dir: string, projectPath: string, ignore: string[]): st
     const abs = path.join(dir, e.name);
     const rel = path.relative(projectPath, abs);
     if (e.isDirectory()) {
-      if (!IGNORE_DIRS.has(e.name) && !matchesIgnore(rel, ignore)) out.push(...walkSourceFiles(abs, projectPath, ignore));
+      if (!IGNORE_DIRS.has(e.name) && !matchesIgnore(rel, ignore)) out.push(...walkSourceFiles(abs, projectPath, ignore, depth + 1));
     } else if (e.isFile() && SOURCE_EXTENSIONS.has(path.extname(e.name)) && !matchesIgnore(rel, ignore)) {
       out.push(abs);
     }
@@ -72,7 +78,10 @@ export function scanSourceHardcoded(projectPath: string): HardcodedFinding[] {
 
   for (const filePath of walkSourceFiles(projectPath, projectPath, ignore)) {
     let content: string;
-    try { content = fs.readFileSync(filePath, 'utf8'); } catch { continue; }
+    try {
+      if (fs.statSync(filePath).size > MAX_FILE_SIZE_BYTES) continue; // skip generated/bundled files
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch { continue; }
 
     const lines = content.split('\n');
     for (let i = 0; i < lines.length; i++) {

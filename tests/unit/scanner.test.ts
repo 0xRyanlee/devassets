@@ -208,4 +208,30 @@ describe('scanSourceHardcoded — hardcoded secret detection', () => {
     expect(Array.isArray(result.hardcodedFindings)).toBe(true);
     expect(result.hardcodedFindings.some(f => f.pattern === 'stripe')).toBe(true);
   });
+
+  it('skips files larger than the size guard instead of scanning them', () => {
+    const bigFile = path.join(SRC_PROJECT, 'src', 'bundle.js');
+    const padding = 'x'.repeat(520 * 1024);
+    fs.writeFileSync(bigFile, `${padding}\nconst STRIPE_KEY = "shouldNotBeFoundInsideThisBigFile1234";\n`);
+    try {
+      const findings = scanSourceHardcoded(SRC_PROJECT);
+      expect(findings.some(f => f.file.includes('bundle.js'))).toBe(false);
+    } finally {
+      fs.rmSync(bigFile);
+    }
+  });
+
+  it('stops descending past the depth guard on a pathologically deep tree', () => {
+    let deep = path.join(SRC_PROJECT, 'deep');
+    for (let i = 0; i < 20; i++) deep = path.join(deep, `d${i}`);
+    fs.mkdirSync(deep, { recursive: true });
+    fs.writeFileSync(path.join(deep, 'leaf.ts'), 'const STRIPE_KEY = "tooDeepInTheTreeToEverBeFound1234";');
+    try {
+      expect(() => scanSourceHardcoded(SRC_PROJECT)).not.toThrow();
+      const findings = scanSourceHardcoded(SRC_PROJECT);
+      expect(findings.some(f => f.file.includes('leaf.ts'))).toBe(false);
+    } finally {
+      fs.rmSync(path.join(SRC_PROJECT, 'deep'), { recursive: true, force: true });
+    }
+  });
 });
