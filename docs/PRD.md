@@ -1,5 +1,11 @@
 # DevAssets - 开发资产管理系统
 
+> ⚠️ **此文件為 2025-06-07 的早期設計稿，已與現況架構脫節，僅供歷史參考，不代表當前實作。**
+> 已知落差(2026-07-19 核對):DB 路徑寫的是 `~/.devasidecar/`(現況為 `~/.devassets/`)、
+> ORM 寫的是 Drizzle(現況是 `node:sqlite` 手寫 queries)、Skills 章節描述的是完全不同設計的
+> `@devassets/*` 介面(現況是 `src/mcp/server.ts` 的 18+ 個 MCP tools)。要了解現況架構請看
+> `docs/ARCHITECTURE.md`；要了解實際指令/工具介面請看 `README.md`。
+
 **PRD 版本**: 1.0  
 **最后更新**: 2025-06-07  
 **产品定位**: 独立开发者的多项目、多平台开发资产统一管理系统

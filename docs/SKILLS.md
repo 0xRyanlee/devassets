@@ -1,5 +1,11 @@
 # DevAssets Skills 设计文档
 
+> ⚠️ **此文件為早期設計稿，已與現況架構脫節，僅供歷史參考，不代表當前實作。**
+> 描述的 `@devassets/check|export|health|verify|rotate|audit` 六個 Skill 與其 TypeScript
+> interface，在現行 `src/mcp/server.ts` 找不到對應實作——現況是 18+ 個 `devassets_*` MCP
+> tools，設計方式完全不同。要看實際可用的工具清單請讀 `README.md` 的「MCP Integration」章節，
+> 或直接讀 `src/mcp/server.ts`。
+
 **目的**: 定义所有 Claude Code 可调用的 Skills，包括参数、返回值、自动判定逻辑。
 
 ---
