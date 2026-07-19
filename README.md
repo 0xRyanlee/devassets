@@ -303,6 +303,7 @@ devassets identity myapp
 |---|---|
 | `devassets init` | Initialize database and signing key |
 | `devassets add-project <name>` | Register a project |
+| `devassets import` | Batch-register every subdirectory under `--root` as a project (onboarding an existing multi-project setup) |
 | `devassets doctor` | Global health report across all projects; `--fix` to re-scan |
 | `devassets portfolio` | Point-in-time snapshot of all projects under a root |
 | `devassets serve` | Start MCP server (stdio) for Claude Code / Cursor |

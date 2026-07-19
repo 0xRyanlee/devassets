@@ -68,6 +68,49 @@ describe('CLI: add-project', () => {
   });
 });
 
+describe('CLI: import', () => {
+  const IMPORT_ROOT = path.join(TMP, 'import-root');
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(IMPORT_ROOT, 'importapp-a'), { recursive: true });
+    fs.mkdirSync(path.join(IMPORT_ROOT, 'importapp-b'), { recursive: true });
+    fs.mkdirSync(path.join(IMPORT_ROOT, '.hidden'), { recursive: true });
+    fs.mkdirSync(path.join(IMPORT_ROOT, 'node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(IMPORT_ROOT, 'importapp-a', '.env'), 'DATABASE_URL=postgres://x\n');
+  });
+
+  it('--dry-run previews without registering', () => {
+    const { stdout, status } = cli(`import --root=${IMPORT_ROOT} --dry-run`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('importapp-a');
+    expect(stdout).toContain('importapp-b');
+    expect(stdout).toContain('dry run');
+    expect(cli('list importapp-a').stdout).not.toContain('DATABASE_URL');
+  });
+
+  it('skips hidden directories and node_modules', () => {
+    const { stdout } = cli(`import --root=${IMPORT_ROOT} --dry-run`);
+    expect(stdout).not.toContain('.hidden');
+    expect(stdout).not.toContain('node_modules');
+  });
+
+  it('registers and scans every subdirectory', () => {
+    const { stdout, status } = cli(`import --root=${IMPORT_ROOT}`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('2 added, 0 updated, 0 skipped');
+
+    const check = cli('check importapp-a --format=json');
+    const found = JSON.parse(check.stdout).categories.environmentVariables.some((a: { name: string }) => a.name === 'DATABASE_URL');
+    expect(found).toBe(true); // proves the scan step ran during import, not just registration
+  });
+
+  it('re-running updates rather than duplicating', () => {
+    const { stdout, status } = cli(`import --root=${IMPORT_ROOT}`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('0 added, 2 updated, 0 skipped');
+  });
+});
+
 describe('CLI: scan', () => {
   it('scans env files and reports assets', () => {
     const { stdout, status } = cli('scan myproject');

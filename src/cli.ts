@@ -3,6 +3,7 @@ import { scheduleUpdateCheck } from './utils/update-check.js';
 import { VERSION } from './utils/version.js';
 import { initCommand } from './commands/init.js';
 import { addProjectCommand } from './commands/add-project.js';
+import { importCommand } from './commands/import.js';
 import { scanCommand } from './commands/scan.js';
 import { checkCommand } from './commands/check.js';
 import { exportCommand } from './commands/export.js';
@@ -51,6 +52,15 @@ program
   .option('--type <type>', 'Project type: saas | mobile | desktop | library | other', 'other')
   .option('--id <id>', 'Explicit project ID (overrides auto-derived slug)')
   .action(addProjectCommand);
+
+program
+  .command('import')
+  .description('Batch-register every subdirectory under a root as a project (for onboarding an existing multi-project setup)')
+  .option('--root <path>', 'Root directory whose subdirectories are projects (default: current directory)')
+  .option('--type <type>', 'Project type applied to all imported projects: saas | mobile | desktop | library | other', 'other')
+  .option('--no-scan', 'Skip scanning each project for .env files after registering')
+  .option('--dry-run', 'Preview what would be imported without registering anything')
+  .action(importCommand);
 
 program
   .command('delete-project <project>')
