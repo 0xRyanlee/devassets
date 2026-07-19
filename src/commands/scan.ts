@@ -1,4 +1,4 @@
-import { getProject, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser } from '../db/queries.js';
+import { getProject, replaceAssets, ensurePaymentPlatformDetected, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
 import { createSpinner } from '../utils/spinner.js';
@@ -23,11 +23,7 @@ export function scanCommand(projectId: string, options: ScanOptions) {
     replaceAssets(projectId, result.assets);
 
     for (const platform of result.detectedPlatforms) {
-      upsertPaymentPlatform({
-        projectId,
-        name: platform,
-        status: 'unconfigured',
-      });
+      ensurePaymentPlatformDetected(projectId, platform);
     }
 
     addAuditLog({

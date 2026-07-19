@@ -36,6 +36,7 @@ import {
   upsertProject,
   persistPaymentStatuses,
   getPaymentPlatforms,
+  ensurePaymentPlatformDetected,
 } from '../../src/db/queries.js';
 import { DEFAULT_ENV } from '../../src/utils/constants.js';
 
@@ -265,5 +266,25 @@ describe('persistPaymentStatuses', () => {
     const stripe = getPaymentPlatforms('proj-a').find(p => p.name === 'stripe');
     expect(stripe?.status).toBe('error');
     expect(stripe?.lastVerified).toBe('2026-07-19T01:00:00.000Z');
+  });
+
+  it('a subsequent scan (ensurePaymentPlatformDetected) does not clobber a live-checked status', () => {
+    // Regression for: check persisted 'connected', then scan/import/doctor --fix used to call
+    // upsertPaymentPlatform with a hardcoded status:'unconfigured', silently wiping it out again.
+    persistPaymentStatuses('proj-a', [
+      { platform: 'paddle', status: 'healthy', risks: [] },
+    ], '2026-07-19T02:00:00.000Z');
+    expect(getPaymentPlatforms('proj-a').find(p => p.name === 'paddle')?.status).toBe('connected');
+
+    ensurePaymentPlatformDetected('proj-a', 'paddle'); // what scan/import/doctor --fix call after detecting it again
+    const paddle = getPaymentPlatforms('proj-a').find(p => p.name === 'paddle');
+    expect(paddle?.status).toBe('connected'); // untouched, not reset to 'unconfigured'
+    expect(paddle?.lastVerified).toBe('2026-07-19T02:00:00.000Z');
+  });
+
+  it('ensurePaymentPlatformDetected still creates a placeholder row for a genuinely new platform', () => {
+    ensurePaymentPlatformDetected('proj-b', 'google_play');
+    const platform = getPaymentPlatforms('proj-b').find(p => p.name === 'google_play');
+    expect(platform?.status).toBe('unconfigured');
   });
 });

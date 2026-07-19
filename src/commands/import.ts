@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { upsertProject, getProject, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser } from '../db/queries.js';
+import { upsertProject, getProject, replaceAssets, ensurePaymentPlatformDetected, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
 import { slugify } from '../utils/slug.js';
@@ -76,7 +76,7 @@ export function importCommand(options: ImportOptions) {
         const scanResult = scanProject(id, projectPath);
         replaceAssets(id, scanResult.assets);
         for (const platform of scanResult.detectedPlatforms) {
-          upsertPaymentPlatform({ projectId: id, name: platform, status: 'unconfigured' });
+          ensurePaymentPlatformDetected(id, platform);
         }
         addAuditLog({ projectId: id, action: 'scan', user: getCurrentUser(), timestamp: scanResult.scannedAt, details: { via: 'import', assetsFound: scanResult.assets.length }, result: 'success' });
         assetsFound = scanResult.assets.length;

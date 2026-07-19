@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import fs from 'fs';
 import { Listr } from 'listr2';
-import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser, getVaultSecretCounts, listVaultSecrets } from '../db/queries.js';
+import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, ensurePaymentPlatformDetected, addAuditLog, getCurrentUser, getVaultSecretCounts, listVaultSecrets } from '../db/queries.js';
 import { validateAssets, assessApiKeyAge } from '../core/validator.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
@@ -109,7 +109,7 @@ async function runDoctorFix(projects: ReturnType<typeof listProjects>, silent: b
         const result = scanProject(p.id, p.path);
         replaceAssets(p.id, result.assets);
         for (const platform of result.detectedPlatforms) {
-          upsertPaymentPlatform({ projectId: p.id, name: platform, status: 'unconfigured' });
+          ensurePaymentPlatformDetected(p.id, platform);
         }
         addAuditLog({ projectId: p.id, action: 'scan', user: getCurrentUser(), timestamp: result.scannedAt, details: { via: 'doctor-fix', assetsFound: result.assets.length }, result: 'success' });
         task.title = `${p.id}: ${result.assets.length} assets refreshed`;

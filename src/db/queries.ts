@@ -100,6 +100,21 @@ export function upsertPaymentPlatform(platform: Omit<PaymentPlatform, 'id'>) {
   }
 }
 
+// scan/import/doctor --fix only know "this platform's config exists" (a PADDLE_API_KEY-shaped
+// env var was found), not its live status — they used to call upsertPaymentPlatform with a
+// hardcoded status:'unconfigured', which clobbered whatever live status `check` had just
+// persisted via persistPaymentStatuses() back to 'unconfigured' on the very next scan. This only
+// inserts a placeholder row if the platform isn't already tracked; an existing row (its live
+// status, verification timestamp, metadata) is left untouched.
+export function ensurePaymentPlatformDetected(projectId: string, name: PaymentPlatform['name']) {
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM payment_platforms WHERE project_id=? AND name=?').get(projectId, name);
+  if (!existing) {
+    db.prepare('INSERT INTO payment_platforms (project_id, name, status, last_verified, metadata) VALUES (?,?,?,?,?)')
+      .run(projectId, name, 'unconfigured', null, null);
+  }
+}
+
 // checkCommand/devassets_check compute live payment status (Paddle/Stripe API calls) but used to
 // only hold it in memory for that one response — payment_platforms stayed at whatever `scan` last
 // wrote (usually 'unconfigured'), so `devassets doctor`/`status`/anything else reading the table

@@ -143,13 +143,13 @@ export async function startMcpServer() {
       const project = getProject(projectId);
       if (!project) return notFound(projectId);
 
-      const { replaceAssets, upsertPaymentPlatform } = await import('../db/queries.js');
+      const { replaceAssets, ensurePaymentPlatformDetected } = await import('../db/queries.js');
       let scanResult;
       try {
         scanResult = scanProject(projectId, project.path);
         replaceAssets(projectId, scanResult.assets);
         for (const platform of scanResult.detectedPlatforms) {
-          upsertPaymentPlatform({ projectId, name: platform, status: 'unconfigured' });
+          ensurePaymentPlatformDetected(projectId, platform);
         }
       } catch (err) {
         addAuditLog({ projectId, action: 'scan', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { via: 'mcp', error: err instanceof Error ? err.message : String(err) }, result: 'failure' });
