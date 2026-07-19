@@ -505,9 +505,13 @@ describe('CLI: run', () => {
     expect(runLog.result).toBe('success');
   });
 
-  it('propagates the child process exit code', () => {
+  it('propagates the child process exit code and records the audit log as a failure', () => {
     const { status } = cli(`run myproject --env=staging -- node ${EXIT_CODE_SCRIPT} 3`);
     expect(status).toBe(3);
+
+    const audit = JSON.parse(cli('audit myproject --format=json').stdout);
+    const runLog = audit.find((l: { action: string; details?: { exitStatus?: number } }) => l.action === 'run' && l.details?.exitStatus === 3);
+    expect(runLog?.result).toBe('failure'); // command ran but exited non-zero — devassets-level "run" did not succeed
   });
 
   it('exits 127 and logs a failure when the command does not exist', () => {

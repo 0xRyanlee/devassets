@@ -19,6 +19,7 @@ interface ImportResult {
   action: 'added' | 'updated' | 'skipped';
   reason?: string;
   assetsFound?: number;
+  scanError?: string;
 }
 
 export function importCommand(options: ImportOptions) {
@@ -69,6 +70,7 @@ export function importCommand(options: ImportOptions) {
     upsertProject({ id, name: entry.name, path: projectPath, type });
 
     let assetsFound: number | undefined;
+    let scanError: string | undefined;
     if (shouldScan) {
       try {
         const scanResult = scanProject(id, projectPath);
@@ -78,16 +80,23 @@ export function importCommand(options: ImportOptions) {
         }
         addAuditLog({ projectId: id, action: 'scan', user: getCurrentUser(), timestamp: scanResult.scannedAt, details: { via: 'import', assetsFound: scanResult.assets.length }, result: 'success' });
         assetsFound = scanResult.assets.length;
-      } catch {
-        // A single project's scan failing shouldn't abort the whole batch — devassets doctor
-        // surfaces per-project scan errors afterward.
+      } catch (err) {
+        // A single project's scan failing shouldn't abort the whole batch, but it must be
+        // visible — silently showing "added" with 0 assets is indistinguishable from a
+        // genuinely empty project, and nothing else records that the scan itself failed.
+        scanError = err instanceof Error ? err.message : String(err);
+        addAuditLog({ projectId: id, action: 'scan', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { via: 'import', error: scanError }, result: 'failure' });
       }
     }
 
-    results.push({ id, name: entry.name, action: existing ? 'updated' : 'added', assetsFound });
+    results.push({ id, name: entry.name, action: existing ? 'updated' : 'added', assetsFound, scanError });
   }
 
   printResults(root, results, !!options.dryRun, shouldScan);
+
+  if (!options.dryRun && results.some(r => r.scanError)) {
+    process.exitCode = 1;
+  }
 }
 
 function printResults(root: string, results: ImportResult[], dryRun: boolean, scanned: boolean) {
@@ -99,17 +108,22 @@ function printResults(root: string, results: ImportResult[], dryRun: boolean, sc
       logger.raw(`  ⊘ ${r.name.padEnd(24)} skipped — ${r.reason}`);
       continue;
     }
+    if (r.scanError) {
+      logger.raw(`  ⚠ ${r.name.padEnd(24)} registered, but scan failed — ${r.scanError}`);
+      continue;
+    }
     const verb = r.action === 'added' ? 'added  ' : 'updated';
     const assets = r.assetsFound !== undefined ? ` · ${r.assetsFound} assets` : '';
     logger.raw(`  ✓ ${r.name.padEnd(24)} ${verb}${assets}`);
   }
 
-  const added = results.filter(r => r.action === 'added').length;
-  const updated = results.filter(r => r.action === 'updated').length;
+  const added = results.filter(r => r.action === 'added' && !r.scanError).length;
+  const updated = results.filter(r => r.action === 'updated' && !r.scanError).length;
   const skipped = results.filter(r => r.action === 'skipped').length;
+  const scanFailed = results.filter(r => r.scanError).length;
 
   logger.raw('');
-  logger.raw(`${added} added, ${updated} updated, ${skipped} skipped`);
+  logger.raw(`${added} added, ${updated} updated, ${skipped} skipped${scanFailed > 0 ? `, ${scanFailed} scan failed` : ''}`);
   if (dryRun) {
     logger.raw('');
     logger.raw('This was a dry run — nothing was registered. Re-run without --dry-run to apply.');

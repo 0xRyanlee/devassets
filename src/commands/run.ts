@@ -47,13 +47,14 @@ export function runCommand(projectId: string, args: string[], options: RunOption
     process.exit(127);
   }
 
+  const commandSucceeded = child.status === 0 && !child.signal;
   addAuditLog({
     projectId,
     action: 'run',
     user: getCurrentUser(),
     timestamp: new Date().toISOString(),
     details: { env, keys: Object.keys(injected), command: args[0], exitStatus: child.status, signal: child.signal ?? undefined },
-    result: 'success',
+    result: commandSucceeded ? 'success' : 'failure',
   });
 
   if (child.signal) {
