@@ -34,6 +34,8 @@ import {
   getVaultSecretFallback,
   getGlobalSecret,
   upsertProject,
+  persistPaymentStatuses,
+  getPaymentPlatforms,
 } from '../../src/db/queries.js';
 import { DEFAULT_ENV } from '../../src/utils/constants.js';
 
@@ -236,5 +238,32 @@ describe('file-type secret round-trip (encoding metadata)', () => {
     const meta = getVaultSecretWithMeta('proj-a', 'local', 'STRIPE_KEY');
     expect(meta?.encoding).toBe('utf8');
     expect(meta?.originalFilename).toBeUndefined();
+  });
+});
+
+describe('persistPaymentStatuses', () => {
+  it('writes the live check status back to payment_platforms (was previously check-only, never persisted)', () => {
+    persistPaymentStatuses('proj-a', [
+      { platform: 'paddle', status: 'healthy', risks: [] },
+    ], '2026-07-19T00:00:00.000Z');
+
+    const platforms = getPaymentPlatforms('proj-a');
+    const paddle = platforms.find(p => p.name === 'paddle');
+    expect(paddle?.status).toBe('connected');
+    expect(paddle?.lastVerified).toBe('2026-07-19T00:00:00.000Z');
+  });
+
+  it('maps a critical check result to error, not left at a stale prior status', () => {
+    persistPaymentStatuses('proj-a', [
+      { platform: 'stripe', status: 'healthy', risks: [] },
+    ], '2026-07-19T00:00:00.000Z');
+    expect(getPaymentPlatforms('proj-a').find(p => p.name === 'stripe')?.status).toBe('connected');
+
+    persistPaymentStatuses('proj-a', [
+      { platform: 'stripe', status: 'critical', risks: [{ level: 'high', asset: 'STRIPE_SECRET_KEY', message: 'expired' }] },
+    ], '2026-07-19T01:00:00.000Z');
+    const stripe = getPaymentPlatforms('proj-a').find(p => p.name === 'stripe');
+    expect(stripe?.status).toBe('error');
+    expect(stripe?.lastVerified).toBe('2026-07-19T01:00:00.000Z');
   });
 });

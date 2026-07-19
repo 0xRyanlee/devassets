@@ -1,6 +1,6 @@
 import { getDb } from './index.js';
 import { encryptVault, decryptVault } from '../utils/crypto.js';
-import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity, SecretScope } from '../types/index.js';
+import type { Project, Asset, PaymentPlatform, AuditLog, ProviderIdentity, SecretScope, PaymentStatus } from '../types/index.js';
 
 type Row = Record<string, unknown>;
 
@@ -97,6 +97,32 @@ export function upsertPaymentPlatform(platform: Omit<PaymentPlatform, 'id'>) {
   } else {
     db.prepare('INSERT INTO payment_platforms (project_id, name, status, last_verified, metadata) VALUES (?,?,?,?,?)')
       .run(platform.projectId, platform.name, platform.status, platform.lastVerified ?? null, metadata);
+  }
+}
+
+// checkCommand/devassets_check compute live payment status (Paddle/Stripe API calls) but used to
+// only hold it in memory for that one response — payment_platforms stayed at whatever `scan` last
+// wrote (usually 'unconfigured'), so `devassets doctor`/`status`/anything else reading the table
+// saw a stale value even right after a successful check. This is the single write-back point both
+// the CLI and MCP `check` handlers call so payment_platforms reflects the last real check result.
+export function persistPaymentStatuses(projectId: string, statuses: PaymentStatus[], timestamp: string) {
+  for (const s of statuses) {
+    upsertPaymentPlatform({
+      projectId,
+      name: s.platform,
+      status: mapCheckStatusToPlatformStatus(s.status),
+      lastVerified: timestamp,
+      metadata: { webhook: s.webhook, apiKeyAgeDays: s.apiKeyAgeDays, riskCount: s.risks.length },
+    });
+  }
+}
+
+function mapCheckStatusToPlatformStatus(status: PaymentStatus['status']): PaymentPlatform['status'] {
+  switch (status) {
+    case 'healthy': return 'connected';
+    case 'warning': return 'connected';
+    case 'critical': return 'error';
+    case 'unconfigured': return 'unconfigured';
   }
 }
 

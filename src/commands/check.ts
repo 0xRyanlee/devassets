@@ -1,4 +1,4 @@
-import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser, findSecretAcrossProjects, getVaultSecretFallback, getLastScanLog } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, addAuditLog, getCurrentUser, findSecretAcrossProjects, getVaultSecretFallback, getLastScanLog, persistPaymentStatuses } from '../db/queries.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
 import { checkPaddleStatus } from '../integrations/paddle.js';
 import { checkStripeStatus } from '../integrations/stripe.js';
@@ -73,6 +73,7 @@ export async function checkCommand(projectId: string, options: CheckOptions) {
 
     if (paymentStatuses.length > 0) {
       result = mergePaymentRisks(result, paymentStatuses);
+      persistPaymentStatuses(projectId, paymentStatuses, result.timestamp);
     }
 
     sp.stop();

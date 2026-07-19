@@ -4,7 +4,7 @@ import os from 'os';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser, listVaultSecrets, getVaultSecret, setVaultSecret, getGlobalSecret, findSecretAcrossProjects, getVaultSecretFallback } from '../db/queries.js';
+import { getProject, getAssets, getPaymentPlatforms, getAuditLogs, listProjects, upsertProject, addAuditLog, getCurrentUser, listVaultSecrets, getVaultSecret, setVaultSecret, getGlobalSecret, findSecretAcrossProjects, getVaultSecretFallback, persistPaymentStatuses } from '../db/queries.js';
 import { scanProject } from '../core/scanner.js';
 import { readProjectEnvValue } from '../core/roots.js';
 import { validateAssets, mergePaymentRisks } from '../core/validator.js';
@@ -106,7 +106,10 @@ export async function startMcpServer() {
           paymentStatuses.push(await checkStripeStatus(projectId, key));
         }
       }
-      if (paymentStatuses.length > 0) result = mergePaymentRisks(result, paymentStatuses);
+      if (paymentStatuses.length > 0) {
+        result = mergePaymentRisks(result, paymentStatuses);
+        persistPaymentStatuses(projectId, paymentStatuses, result.timestamp);
+      }
 
       // Annotate missing assets with vault location hints for agent discoverability
       const vaultHints: Record<string, string> = {};
