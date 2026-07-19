@@ -460,7 +460,7 @@ export async function startMcpServer() {
 
   server.tool(
     'devassets_get_secret',
-    'Retrieve a project-scoped secret from the vault. Searches the specified project first, then the _global vault. For account-level credentials shared across projects (VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs), prefer devassets_get_global_secret which searches only the global scope.',
+    'Retrieve a project-scoped secret from the vault. Searches the specified project first, then the _global vault. For account-level credentials shared across projects (VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs), prefer devassets_get_global_secret which searches only the global scope. WARNING: the returned value is plaintext and will appear in this conversation/transcript — the calling agent should avoid echoing it back to the user and should redact it in any logs it keeps.',
     {
       project: z.string().describe('Primary project ID to look up first'),
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. PADDLE_API_KEY)'),
@@ -490,7 +490,7 @@ export async function startMcpServer() {
 
   server.tool(
     'devassets_get_global_secret',
-    'Retrieve an account-level credential from the global vault. Use this for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, STRIPE_SECRET_KEY (when shared), etc. Does not require a project context. Returns the plaintext value.',
+    'Retrieve an account-level credential from the global vault. Use this for credentials shared across multiple projects: VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs, STRIPE_SECRET_KEY (when shared), etc. Does not require a project context. Returns the plaintext value. WARNING: the returned value is plaintext and will appear in this conversation/transcript — the calling agent should avoid echoing it back to the user and should redact it in any logs it keeps.',
     {
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. VERCEL_TOKEN)'),
       env: z.string().optional().describe('Environment (default: local)'),
