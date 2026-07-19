@@ -47,25 +47,35 @@ jobs:
         run: devassets init
 
       - name: Register project
+        env:
+          PROJECT: ${{ inputs.project || github.event.repository.name }}
         run: |
-          devassets add-project ${{ inputs.project || github.event.repository.name }} \
+          devassets add-project "$PROJECT" \
             --path=${{ github.workspace }} \
             --type=saas
 
       - name: Scan assets
-        run: devassets scan ${{ inputs.project || github.event.repository.name }}
+        env:
+          PROJECT: ${{ inputs.project || github.event.repository.name }}
+        run: devassets scan "$PROJECT"
 
       - name: Check assets
+        env:
+          PROJECT: ${{ inputs.project || github.event.repository.name }}
+          ENVIRONMENT: ${{ inputs.environment || 'production' }}
         run: |
-          devassets check ${{ inputs.project || github.event.repository.name }} \
-            --env=${{ inputs.environment || 'production' }} \
+          devassets check "$PROJECT" \
+            --env="$ENVIRONMENT" \
             --fail-on-risk
 
       - name: Upload manifest (on push to main)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          PROJECT: ${{ inputs.project || github.event.repository.name }}
+          ENVIRONMENT: ${{ inputs.environment || 'production' }}
         run: |
-          devassets export ${{ inputs.project || github.event.repository.name }} \
-            --env=${{ inputs.environment || 'production' }} \
+          devassets export "$PROJECT" \
+            --env="$ENVIRONMENT" \
             --output=devassets-manifest.yml
 
       - name: Archive manifest
