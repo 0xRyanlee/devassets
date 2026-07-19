@@ -212,7 +212,7 @@ describe('scanSourceHardcoded — hardcoded secret detection', () => {
   it('skips files larger than the size guard instead of scanning them', () => {
     const bigFile = path.join(SRC_PROJECT, 'src', 'bundle.js');
     const padding = 'x'.repeat(520 * 1024);
-    fs.writeFileSync(bigFile, `${padding}\nconst STRIPE_KEY = "shouldNotBeFoundInsideThisBigFile1234";\n`);
+    fs.writeFileSync(bigFile, `${padding}\nconst api_key = "shouldNotBeFoundInsideThisBigFile1234";\n`);
     try {
       const findings = scanSourceHardcoded(SRC_PROJECT);
       expect(findings.some(f => f.file.includes('bundle.js'))).toBe(false);
@@ -225,7 +225,7 @@ describe('scanSourceHardcoded — hardcoded secret detection', () => {
     let deep = path.join(SRC_PROJECT, 'deep');
     for (let i = 0; i < 20; i++) deep = path.join(deep, `d${i}`);
     fs.mkdirSync(deep, { recursive: true });
-    fs.writeFileSync(path.join(deep, 'leaf.ts'), 'const STRIPE_KEY = "tooDeepInTheTreeToEverBeFound1234";');
+    fs.writeFileSync(path.join(deep, 'leaf.ts'), 'const api_key = "tooDeepInTheTreeToEverBeFound1234";');
     try {
       expect(() => scanSourceHardcoded(SRC_PROJECT)).not.toThrow();
       const findings = scanSourceHardcoded(SRC_PROJECT);
