@@ -5,6 +5,28 @@
 
 ---
 
+## [1.16.260719] — 2026-07-19
+
+### Added
+- `devassets import --root <path>`: batch-register every subdirectory as a project (onboarding an existing multi-project setup), with `--dry-run`, `--no-scan`, `--type`.
+- `devassets key-export` / `devassets key-restore`: password-encrypted backup and recovery for the vault signature key. Previously, losing `signature.key` meant every stored secret was permanently unrecoverable with no way back.
+- `devassets_resolve_project(cwd)` MCP tool: resolves a working directory to its registered project ID in one call, picking the most specific match when a parent and a nested project are both registered.
+- `assessApiKeyAge` (written early in development, never called) is now wired into `doctor` — flags vault secrets approaching or past rotation age.
+- `doctor` now detects a key name duplicated across 2+ projects that should probably live in `_global` instead — the exact real-world mistake that drove the 1.15 release.
+- `scripts/check-docs-sync.mjs`: a release-time check that README's command table, MCP tool list, and identity-provider table actually match the source, wired into `prepublishOnly` and CI.
+
+### Fixed
+- **Security**: MCP `devassets_export`'s auto-generated output path could escape the working directory via a crafted environment value, and (once fixed) still didn't guard against a pre-existing symlink at the write target; cross-project secret fallback removed from `getVaultSecretFallback` so a project can no longer silently receive another project's secret; `.devassets.yml` `roots:` entries that escape the project directory (via `../` or a symlink) are rejected; `devassets_add_project` blocks registering the home directory, including via a symlink to it; the `gcloud` provider's credential-file reads are fenced to the project directory and symlink-safe; the public `check.yml` reusable workflow no longer interpolates `${{ inputs.* }}` directly into shell steps; `export --encrypt`/`--encrypt-for` validation is now consistent in both directions (either flag alone correctly triggers encryption; it can no longer silently fall back to plaintext).
+- **`devassets run` never actually executed the target command.** A Commander v12 argument-parsing assumption was wrong, so every invocation tried to spawn the project ID itself and failed with ENOENT. This path had zero test coverage until this release.
+- `payment_platforms` status is now actually persisted after `check` (previously computed live and discarded), and a subsequent `scan`/`doctor --fix` no longer resets it back to `unconfigured`.
+- Closed a TOCTOU window in signature-key/DB-file creation; schema migrations now run once instead of on every CLI invocation.
+- `devassets run`'s audit log now reflects the child process's actual exit status instead of always recording success.
+- Removed the orphaned `ui/` subproject (never had a working backend) and the owner's private multi-project catalog data that was being compiled into the published package — now an optional external override file, not shipped.
+- Fixed the actual root cause of npm being stuck on the broken `1.13.260619` release for a month: `.github/workflows/publish.yml` had been drafted weeks earlier but never reached GitHub (blocked by a stale `.gitignore` rule left from an unrelated, since-resolved OAuth-scope workaround), and separately called a nonexistent `build:all` script.
+
+### Why
+A full audit pass (multi-dimensional review plus a strategic analysis pass) surfaced roughly twenty hardening items alongside several pre-existing infra issues; fixing them is what surfaced the `devassets run` bug and the broken publish pipeline. Before merging, two independent adversarial reviews were run against the full diff and both found real issues — including a systematic pattern where every path-boundary check added during this pass compared lexical paths instead of symlink-resolved ones, making all of them bypassable. `src/utils/fs-safety.ts` (new) centralizes the fix.
+
 ## [1.15.260706] — 2026-07-06
 
 ### Added
