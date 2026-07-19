@@ -92,8 +92,15 @@ function assessEncryptionNeed(checkResult: CheckResult, options: ExportOptions):
   return { encryptionRecommended: false };
 }
 
+// project/environment can come from MCP callers (potentially prompt-injected agents), so they're
+// sanitized before being interpolated into a filesystem path — an unsanitized "../../.git/hooks/x"
+// environment value would otherwise write outside cwd even though output_path was never supplied.
+function safePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_.-]/g, '_');
+}
+
 export function generateOutputPath(project: string, environment: string, format: ManifestFormat): string {
   const ext = format === 'manifest' ? 'yml' : 'md';
-  const filename = `${project}-${environment}-${new Date().toISOString().split('T')[0]}.${ext}`;
+  const filename = `${safePathSegment(project)}-${safePathSegment(environment)}-${new Date().toISOString().split('T')[0]}.${ext}`;
   return path.join(process.cwd(), filename);
 }

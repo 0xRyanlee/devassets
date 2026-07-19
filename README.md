@@ -397,7 +397,7 @@ Agent:  devassets_check(myapp, env=production)
 Available MCP tools:
 
 **Project health & scanning**
-`devassets_list_projects` · `devassets_check` · `devassets_scan` · `devassets_health` · `devassets_doctor`
+`devassets_list_projects` · `devassets_resolve_project` · `devassets_check` · `devassets_scan` · `devassets_health` · `devassets_doctor`
 
 **Credential management**
 `devassets_identity` · `devassets_rotate` · `devassets_audit` · `devassets_export` · `devassets_add_project`

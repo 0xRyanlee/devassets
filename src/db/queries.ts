@@ -346,6 +346,10 @@ export function findSecretAcrossProjects(key: string, env?: string, scope?: Secr
 
 // Get a vault secret, falling back to _global then other projects.
 // Lookup order: primary project → _global (account-level) → other projects.
+// Only checks the primary project and _global — never falls back to an unrelated project's vault
+// entry, which would silently hand one project's credential to another (findSecretAcrossProjects
+// remains available separately for surfacing "found elsewhere" as a discoverability hint, not as
+// a value source).
 export function getVaultSecretFallback(
   primaryProjectId: string,
   env: string,
@@ -354,7 +358,6 @@ export function getVaultSecretFallback(
   const own = getVaultSecret(primaryProjectId, env, key);
   if (own !== undefined) return { value: own, sourceProject: primaryProjectId, scope: queryVaultSecretScope(primaryProjectId, env, key) };
 
-  // Check _global project before arbitrary fallbacks
   if (primaryProjectId !== '_global') {
     try {
       const globalVal = getVaultSecret('_global', env, key);
@@ -364,16 +367,6 @@ export function getVaultSecretFallback(
     }
   }
 
-  const matches = findSecretAcrossProjects(key, env);
-  for (const match of matches) {
-    if (match.projectId === primaryProjectId || match.projectId === '_global') continue;
-    try {
-      const v = getVaultSecret(match.projectId, env, key);
-      if (v !== undefined) return { value: v, sourceProject: match.projectId, scope: match.scope };
-    } catch {
-      // Vault key mismatch on another project entry — skip silently
-    }
-  }
   return undefined;
 }
 

@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -13,6 +16,16 @@ import { generateCiSnippet } from '../core/ci.js';
 import { DEFAULT_ENV } from '../utils/constants.js';
 import { VERSION } from '../utils/version.js';
 
+const PROJECT_ID_PATTERN = /^[a-zA-Z0-9_.-]+$/;
+
+function textResult(data: unknown, pretty = false) {
+  return { content: [{ type: 'text' as const, text: pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data) }] };
+}
+
+function notFound(projectId: string) {
+  return textResult({ error: `Project not found: ${projectId}` });
+}
+
 export async function startMcpServer() {
   const server = new McpServer({
     name: 'devassets',
@@ -26,14 +39,34 @@ export async function startMcpServer() {
     async () => {
       const projects = listProjects().filter(p => p.id !== '_global');
       if (projects.length === 0) {
-        return { content: [{ type: 'text', text: JSON.stringify({ projects: [], message: 'No projects registered. Run: devassets add-project <name> --path=<path>' }) }] };
+        return textResult({ projects: [], message: 'No projects registered. Run: devassets add-project <name> --path=<path>' });
       }
       const enriched = projects.map(p => {
         const assets = getAssets(p.id);
         const result = validateAssets(assets, p.id, undefined, p.type);
         return { id: p.id, name: p.name, path: p.path, type: p.type, status: result.status, assetCount: assets.length };
       });
-      return { content: [{ type: 'text', text: JSON.stringify(enriched, null, 2) }] };
+      return textResult(enriched, true);
+    }
+  );
+
+  server.tool(
+    'devassets_resolve_project',
+    'Resolve which registered project a working directory belongs to, by matching cwd against each project\'s registered path. Use this instead of devassets_list_projects + manual path comparison when you know the current directory but not the project ID.',
+    {
+      cwd: z.string().describe('Absolute path to resolve (e.g. the calling agent\'s current working directory)'),
+    },
+    async ({ cwd }) => {
+      const resolved = path.resolve(cwd);
+      const projects = listProjects().filter(p => p.id !== '_global');
+      const match = projects.find(p => {
+        const projectPath = path.resolve(p.path);
+        return resolved === projectPath || resolved.startsWith(projectPath + path.sep);
+      });
+      if (!match) {
+        return textResult({ found: false, cwd: resolved, message: 'No registered project contains this directory. Run devassets_add_project to register it.' });
+      }
+      return textResult({ found: true, cwd: resolved, project: { id: match.id, name: match.name, path: match.path, type: match.type } });
     }
   );
 
@@ -46,7 +79,7 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, environment }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       const assets = getAssets(projectId, environment);
       let result = validateAssets(assets, projectId, environment, project.type);
@@ -85,7 +118,7 @@ export async function startMcpServer() {
 
       addAuditLog({ projectId, action: 'check', user: getCurrentUser(), timestamp: result.timestamp, details: { environment, via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return textResult(result, true);
     }
   );
 
@@ -97,7 +130,7 @@ export async function startMcpServer() {
     },
     async ({ project: projectId }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       const { replaceAssets, upsertPaymentPlatform } = await import('../db/queries.js');
       const scanResult = scanProject(projectId, project.path);
@@ -107,7 +140,7 @@ export async function startMcpServer() {
       }
       addAuditLog({ projectId, action: 'scan', user: getCurrentUser(), timestamp: scanResult.scannedAt, details: { via: 'mcp', assetsFound: scanResult.assets.length }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ assetsFound: scanResult.assets.length, envFiles: scanResult.envFilesFound, platforms: scanResult.detectedPlatforms }) }] };
+      return textResult({ assetsFound: scanResult.assets.length, envFiles: scanResult.envFilesFound, platforms: scanResult.detectedPlatforms });
     }
   );
 
@@ -124,30 +157,30 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, environment = 'production', format = 'manifest', encrypt, encrypt_for, output_path }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       if (output_path) {
-        const pathMod = await import('path');
-        const fsMod = await import('fs');
-        const resolved = pathMod.resolve(output_path);
-        const cwd = pathMod.resolve(process.cwd());
-        if (!resolved.startsWith(cwd + pathMod.sep) && resolved !== cwd) {
-          return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path must be within current working directory` }) }] };
+        const resolved = path.resolve(output_path);
+        const cwd = path.resolve(process.cwd());
+        if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+          return textResult({ error: `output_path must be within current working directory` });
         }
         // Resolve symlinks on the parent directory to prevent symlink traversal attacks
         try {
-          const parentReal = fsMod.realpathSync(pathMod.dirname(resolved));
-          const cwdReal = fsMod.realpathSync(cwd);
-          if (!parentReal.startsWith(cwdReal + pathMod.sep) && parentReal !== cwdReal) {
-            return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path resolves outside current working directory via symlink` }) }] };
+          const parentReal = fs.realpathSync(path.dirname(resolved));
+          const cwdReal = fs.realpathSync(cwd);
+          if (!parentReal.startsWith(cwdReal + path.sep) && parentReal !== cwdReal) {
+            return textResult({ error: `output_path resolves outside current working directory via symlink` });
           }
         } catch {
-          return { content: [{ type: 'text', text: JSON.stringify({ error: `output_path parent directory does not exist` }) }] };
+          return textResult({ error: `output_path parent directory does not exist` });
         }
       }
 
       const assets = getAssets(projectId, environment);
       const checkResult = validateAssets(assets, projectId, environment, project.type);
+      // generateOutputPath sanitizes project/environment internally, so even when output_path is
+      // omitted the auto-generated filename can't escape cwd via a crafted environment value.
       const outputPath = output_path ?? generateOutputPath(projectId, environment, format);
 
       const result = exportManifest(checkResult, {
@@ -157,7 +190,7 @@ export async function startMcpServer() {
       addAuditLog({ projectId, action: 'export', user: getCurrentUser(), timestamp: result.timestamp, details: { environment, format, encrypted: result.encrypted, via: 'mcp' }, result: 'success' });
 
       // preview omitted: plaintext manifest content must not be returned in MCP response unencrypted
-      return { content: [{ type: 'text', text: JSON.stringify({ signature: result.signature, timestamp: result.timestamp, encrypted: result.encrypted, outputPath: result.outputPath, autoDecision: result.autoDecision }) }] };
+      return textResult({ signature: result.signature, timestamp: result.timestamp, encrypted: result.encrypted, outputPath: result.outputPath, autoDecision: result.autoDecision });
     }
   );
 
@@ -171,7 +204,7 @@ export async function startMcpServer() {
     async ({ project: projectId, focus }) => {
       const projects = projectId ? [getProject(projectId)].filter(Boolean) : listProjects().filter(p => p.id !== '_global');
       if (projects.length === 0) {
-        return { content: [{ type: 'text', text: JSON.stringify({ projects: [], message: projectId ? `Project not found: ${projectId}` : 'No projects registered. Run: devassets add-project <name> --path=<path>' }) }] };
+        return textResult({ projects: [], message: projectId ? `Project not found: ${projectId}` : 'No projects registered. Run: devassets add-project <name> --path=<path>' });
       }
       const summaries = projects.map(p => {
         if (!p) return null;
@@ -183,7 +216,7 @@ export async function startMcpServer() {
         return { id: p.id, name: p.name, status: result.status, criticalCount: result.risks.filter(r => r.level === 'critical').length, topRisks };
       }).filter(Boolean);
 
-      return { content: [{ type: 'text', text: JSON.stringify(summaries, null, 2) }] };
+      return textResult(summaries, true);
     }
   );
 
@@ -197,11 +230,11 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, since_days = 7, action }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       let logs = getAuditLogs(projectId, since_days);
       if (action) logs = logs.filter(l => l.action === action);
-      return { content: [{ type: 'text', text: JSON.stringify(logs, null, 2) }] };
+      return textResult(logs, true);
     }
   );
 
@@ -214,7 +247,7 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, key_name }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       addAuditLog({ projectId, action: 'rotate', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { keyName: key_name, status: 'initiated', via: 'mcp' }, result: 'success' });
 
@@ -237,7 +270,7 @@ export async function startMcpServer() {
         auditRecorded: true,
       };
 
-      return { content: [{ type: 'text', text: JSON.stringify(instructions, null, 2) }] };
+      return textResult(instructions, true);
     }
   );
 
@@ -245,30 +278,35 @@ export async function startMcpServer() {
     'devassets_add_project',
     'Register a new project with DevAssets',
     {
-      id: z.string().describe('Project slug ID (e.g. legita, sparkie)'),
+      id: z.string().max(256).regex(PROJECT_ID_PATTERN, 'Project ID must be alphanumeric with -, _, or . only').describe('Project slug ID (e.g. legita, sparkie)'),
       name: z.string().describe('Human-readable project name'),
       path: z.string().describe('Absolute path to the project directory'),
       type: z.enum(['saas', 'mobile', 'desktop', 'library', 'other']).optional().describe('Project type'),
     },
     async ({ id, name, path: projectPath, type = 'other' }) => {
       if (id === '_global') {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: `"_global" is a reserved project ID for account-level credentials. Use devassets_set_global_secret to store global keys.` }) }] };
+        return textResult({ error: `"_global" is a reserved project ID for account-level credentials. Use devassets_set_global_secret to store global keys.` });
       }
-      const { statSync } = await import('fs');
-      const resolvedPath = (await import('path')).resolve(projectPath);
+      const resolvedPath = path.resolve(projectPath);
       try {
-        const stat = statSync(resolvedPath);
+        const stat = fs.statSync(resolvedPath);
         if (!stat.isDirectory()) throw new Error('Not a directory');
       } catch {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: `Path does not exist or is not a directory: ${projectPath}` }) }] };
+        return textResult({ error: `Path does not exist or is not a directory: ${projectPath}` });
       }
+      // Block registering the home directory itself or anything above it — a blacklist of
+      // specific dotfile dirs (~/.ssh etc.) doesn't stop e.g. registering all of $HOME, which
+      // would let a subsequent devassets_scan walk every unrelated project on the machine.
+      const home = path.resolve(os.homedir());
+      const isHomeOrAncestor = resolvedPath === home || home === resolvedPath || home.startsWith(resolvedPath + path.sep);
+      const isFilesystemRoot = resolvedPath === path.parse(resolvedPath).root;
       const sensitiveRoots = ['/.ssh', '/.gnupg', '/.aws', '/.config/gcloud'];
-      const isSensitive = sensitiveRoots.some(s => resolvedPath.includes(s));
-      if (isSensitive) {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: `Registering sensitive system paths is not allowed: ${projectPath}` }) }] };
+      const isSensitiveDotdir = sensitiveRoots.some(s => resolvedPath.includes(s));
+      if (isHomeOrAncestor || isFilesystemRoot || isSensitiveDotdir) {
+        return textResult({ error: `Registering this path is not allowed (your home directory, a parent of it, the filesystem root, or a sensitive credential directory): ${projectPath}` });
       }
       upsertProject({ id, name, path: resolvedPath, type });
-      return { content: [{ type: 'text', text: JSON.stringify({ registered: true, id, name, path: resolvedPath, type, next: `devassets_scan with project=${id}` }) }] };
+      return textResult({ registered: true, id, name, path: resolvedPath, type, next: `devassets_scan with project=${id}` });
     }
   );
 
@@ -280,11 +318,11 @@ export async function startMcpServer() {
     },
     async ({ project: projectId }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
       const { resolveProjectIdentities } = await import('../core/identity.js');
       const identities = await resolveProjectIdentities(project);
       addAuditLog({ projectId, action: 'identity', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { resolved: identities.length, via: 'mcp' }, result: 'success' });
-      return { content: [{ type: 'text', text: JSON.stringify(identities, null, 2) }] };
+      return textResult(identities, true);
     }
   );
 
@@ -297,11 +335,11 @@ export async function startMcpServer() {
     async ({ json: asJson }) => {
       const projects = listProjects();
       if (projects.length === 0) {
-        return { content: [{ type: 'text', text: JSON.stringify({ message: 'No projects registered.' }) }] };
+        return textResult({ message: 'No projects registered.' });
       }
       const report = buildDoctorReport(projects);
       if (asJson) {
-        return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
+        return textResult(report, true);
       }
       const summary = {
         generatedAt: report.generatedAt,
@@ -310,7 +348,7 @@ export async function startMcpServer() {
         recentActivity: report.recentActivity.slice(0, 5),
         projects: report.projects.map(p => ({ id: p.id, name: p.name, status: p.status, riskCount: p.riskCount })),
       };
-      return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
+      return textResult(summary, true);
     }
   );
 
@@ -324,7 +362,7 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, branch = 'main', environment = 'production' }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       const snippet = generateCiSnippet(projectId, branch, environment);
       const installHint = [
@@ -345,7 +383,7 @@ export async function startMcpServer() {
         `- Skipping /devassets-ci skill in Claude Code also automates this setup`,
       ].join('\n');
 
-      return { content: [{ type: 'text', text: installHint }] };
+      return { content: [{ type: 'text' as const, text: installHint }] };
     }
   );
 
@@ -361,7 +399,7 @@ export async function startMcpServer() {
         ? { 'devassets-check': readSkillContent('devassets-check'), 'devassets-ci': readSkillContent('devassets-ci') }
         : { [skill]: readSkillContent(skill) };
       const installPath = `${process.env.HOME}/.claude/commands/`;
-      return { content: [{ type: 'text', text: JSON.stringify({ installPath, skills, installCommand: 'devassets install-skills' }, null, 2) }] };
+      return textResult({ installPath, skills, installCommand: 'devassets install-skills' }, true);
     }
   );
 
@@ -379,9 +417,9 @@ export async function startMcpServer() {
         const hint = scope === 'global'
           ? `Use devassets_set_global_secret to store ${key} as a global credential.`
           : `Use devassets set <project> ${key} to store it.`;
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, message: `No vault entry found for ${key}${env ? ` [${env}]` : ''}${scope ? ` [scope=${scope}]` : ''}. ${hint}` }) }] };
+        return textResult({ found: false, key, message: `No vault entry found for ${key}${env ? ` [${env}]` : ''}${scope ? ` [scope=${scope}]` : ''}. ${hint}` });
       }
-      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, matches }) }] };
+      return textResult({ found: true, key, matches });
     }
   );
 
@@ -395,15 +433,15 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, env, scope }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
       const secrets = listVaultSecrets(projectId, env, scope);
-      return { content: [{ type: 'text', text: JSON.stringify({ project: projectId, count: secrets.length, secrets }) }] };
+      return textResult({ project: projectId, count: secrets.length, secrets });
     }
   );
 
   server.tool(
     'devassets_get_secret',
-    'Retrieve a project-scoped secret from the vault. Searches the specified project first, then the _global vault, then other projects as fallback. For account-level credentials shared across projects (VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs), prefer devassets_get_global_secret which searches only the global scope.',
+    'Retrieve a project-scoped secret from the vault. Searches the specified project first, then the _global vault. For account-level credentials shared across projects (VERCEL_TOKEN, ANTHROPIC_API_KEY, GitHub PATs), prefer devassets_get_global_secret which searches only the global scope.',
     {
       project: z.string().describe('Primary project ID to look up first'),
       key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'Key name must be uppercase with underscores').describe('Key name (e.g. PADDLE_API_KEY)'),
@@ -411,21 +449,23 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, key, env = DEFAULT_ENV }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       const result = getVaultSecretFallback(projectId, env, key);
       if (!result) {
+        // findSecretAcrossProjects here is a discoverability hint only — its matches are never
+        // used as the returned value, so a project can't silently receive another project's secret.
         const elsewhere = findSecretAcrossProjects(key);
         const altEnvs = [...new Set(elsewhere.map(m => m.env))].filter(e => e !== env);
         const message = altEnvs.length > 0
           ? `${key} exists under env=${altEnvs.join(',')} but you queried env=${env}. Add --env ${altEnvs[0]} or omit to use the default (${DEFAULT_ENV}).`
           : `${key} not found in any vault for env=${env}. Run: devassets set ${projectId} ${key} --env ${env}`;
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message }) }] };
+        return textResult({ found: false, key, env, alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message });
       }
 
       addAuditLog({ projectId, action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, sourceProject: result.sourceProject, scope: result.scope, via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value: result.value, sourceProject: result.sourceProject, scope: result.scope }) }] };
+      return textResult({ found: true, key, env, value: result.value, sourceProject: result.sourceProject, scope: result.scope });
     }
   );
 
@@ -441,7 +481,7 @@ export async function startMcpServer() {
       try {
         value = getGlobalSecret(key, env);
       } catch (err) {
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, error: err instanceof Error ? err.message : String(err) }) }] };
+        return textResult({ found: false, key, env, error: err instanceof Error ? err.message : String(err) });
       }
 
       if (!value) {
@@ -450,12 +490,12 @@ export async function startMcpServer() {
         const message = altEnvs.length > 0
           ? `${key} exists under env=${altEnvs.join(',')} but you queried env=${env}. Specify env explicitly.`
           : `${key} not found in global vault [${env}]. Store it with: devassets_set_global_secret(key="${key}", value="<secret>")`;
-        return { content: [{ type: 'text', text: JSON.stringify({ found: false, key, env, scope: 'global', alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message }) }] };
+        return textResult({ found: false, key, env, scope: 'global', alternateEnvs: elsewhere.map(m => ({ env: m.env, project: m.projectId })), message });
       }
 
       addAuditLog({ projectId: '_global', action: 'get', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ found: true, key, env, value, scope: 'global', sourceProject: '_global' }) }] };
+      return textResult({ found: true, key, env, value, scope: 'global', sourceProject: '_global' });
     }
   );
 
@@ -474,7 +514,7 @@ export async function startMcpServer() {
 
       addAuditLog({ projectId: '_global', action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'global', via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ stored: true, key, env, scope: 'global', message: `${key} stored in global vault [${env}]. Accessible via devassets_get_global_secret.` }) }] };
+      return textResult({ stored: true, key, env, scope: 'global', message: `${key} stored in global vault [${env}]. Accessible via devassets_get_global_secret.` });
     }
   );
 
@@ -491,17 +531,16 @@ export async function startMcpServer() {
     },
     async ({ project: projectId, key, value, env = DEFAULT_ENV, provider, account }) => {
       const project = getProject(projectId);
-      if (!project) return { content: [{ type: 'text', text: JSON.stringify({ error: `Project not found: ${projectId}` }) }] };
+      if (!project) return notFound(projectId);
 
       setVaultSecret(projectId, env, key, value, { provider, account }, 'project');
 
       addAuditLog({ projectId, action: 'set', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { key, env, scope: 'project', via: 'mcp' }, result: 'success' });
 
-      return { content: [{ type: 'text', text: JSON.stringify({ stored: true, key, env, project: projectId, scope: 'project', message: `${key} stored in project vault [${projectId}/${env}]. Retrieve with devassets_get_secret.` }) }] };
+      return textResult({ stored: true, key, env, project: projectId, scope: 'project', message: `${key} stored in project vault [${projectId}/${env}]. Retrieve with devassets_get_secret.` });
     }
   );
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-

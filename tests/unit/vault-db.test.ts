@@ -141,11 +141,10 @@ describe('getVaultSecretFallback priority order', () => {
     expect(result?.sourceProject).toBe('_global');
   });
 
-  it('falls back to other projects if not in primary or _global', () => {
+  it('does NOT fall back to an unrelated project — only primary + _global are checked', () => {
     setVaultSecret('proj-a', 'local', 'ONLY_IN_A', 'val_a', {}, 'project');
     const result = getVaultSecretFallback('proj-b', 'local', 'ONLY_IN_A');
-    expect(result?.value).toBe('val_a');
-    expect(result?.sourceProject).toBe('proj-a');
+    expect(result).toBeUndefined();
   });
 
   it('returns undefined if key exists nowhere', () => {
