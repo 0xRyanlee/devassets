@@ -1,17 +1,8 @@
 import type { ResolvedIdentity } from '../../types/index.js';
+import { fetchAuthedJson } from './http.js';
 
 export async function resolve(token: string): Promise<ResolvedIdentity> {
-  try {
-    const res = await fetch('https://registry.npmjs.org/-/whoami', {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      return { provider: 'npm', valid: false, error: `npm registry ${res.status} — token invalid or expired` };
-    }
-    const { username } = await res.json() as { username: string };
-    return { provider: 'npm', valid: true, account: username };
-  } catch (err) {
-    return { provider: 'npm', valid: false, error: err instanceof Error ? err.message : 'unreachable' };
-  }
+  const result = await fetchAuthedJson<{ username: string }>('npm registry', 'https://registry.npmjs.org/-/whoami', token);
+  if (!result.ok) return { provider: 'npm', valid: false, error: result.error };
+  return { provider: 'npm', valid: true, account: result.data.username };
 }
