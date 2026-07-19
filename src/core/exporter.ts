@@ -29,10 +29,14 @@ export function buildManifestData(checkResult: CheckResult): Record<string, unkn
 }
 
 export function exportManifest(checkResult: CheckResult, options: ExportOptions): ExportResult {
-  // encrypt=true with no password used to silently fall through to a plaintext manifest (the
-  // `if (options.encrypt && options.encryptFor)` check below just skipped encryption). Both CLI
+  // Encryption is requested by EITHER flag alone: --encrypt with no password used to silently
+  // fall through to plaintext, and conversely --encrypt-for=<password> without --encrypt also
+  // used to write plaintext even though supplying a password is a clear signal of intent — a
+  // caller who forgets the --encrypt flag but did type a password is the more dangerous direction
+  // to get wrong (they'd reasonably assume "I gave it a password, so it's encrypted"). Both CLI
   // and MCP go through this single function, so validating here covers both call sites.
-  if (options.encrypt) {
+  const shouldEncrypt = options.encrypt || !!options.encryptFor;
+  if (shouldEncrypt) {
     if (!options.encryptFor) {
       throw new Error('--encrypt requires --encrypt-for <password> — refusing to write an unencrypted manifest');
     }
@@ -72,7 +76,7 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
   const autoDecision = assessEncryptionNeed(checkResult, options);
 
   let encrypted = false;
-  if (options.encrypt && options.encryptFor) {
+  if (shouldEncrypt && options.encryptFor) {
     finalContent = encryptAES(finalContent, options.encryptFor);
     encrypted = true;
   }
@@ -102,8 +106,10 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
 }
 
 function assessEncryptionNeed(checkResult: CheckResult, options: ExportOptions): ExportResult['autoDecision'] {
-  if (options.encrypt !== undefined) {
-    return { encryptionRecommended: options.encrypt };
+  if (options.encrypt !== undefined || options.encryptFor) {
+    // Mirrors exportManifest's own shouldEncrypt: a supplied password means "encrypt" even if
+    // encrypt itself is unset or (for a caller that explicitly contradicts itself) false.
+    return { encryptionRecommended: options.encrypt || !!options.encryptFor };
   }
   const isProduction = options.environment === 'production';
   const hasCritical = checkResult.risks.some(r => r.level === 'critical');

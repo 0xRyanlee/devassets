@@ -115,4 +115,13 @@ describe('exportManifest', () => {
       project: 'legita', environment: 'production', format: 'manifest', encrypt: true, encryptFor: 'short',
     })).toThrow(/8 characters/);
   });
+
+  it('encrypts when --encrypt-for is given even without --encrypt (password implies intent)', () => {
+    const checkResult = validateAssets(sampleAssets, 'legita', 'production');
+    const result = exportManifest(checkResult, {
+      project: 'legita', environment: 'production', format: 'manifest', encryptFor: 'test-password',
+    });
+    expect(result.encrypted).toBe(true);
+    expect(result.content).not.toContain('legita');
+  });
 });

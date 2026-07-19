@@ -219,6 +219,14 @@ describe('CLI: export', () => {
     const content = fs.readFileSync(outPath, 'utf-8');
     expect(content).not.toContain('project: myproject');
   });
+
+  it('--encrypt-for alone (no --encrypt flag) still encrypts, not plaintext', () => {
+    const outPath = path.join(TMP, 'encrypted-manifest-implicit.yml');
+    const { status } = cli(`export myproject --env=production --encrypt-for=a-real-password --output=${outPath}`);
+    expect(status).toBe(0);
+    const content = fs.readFileSync(outPath, 'utf-8');
+    expect(content).not.toContain('project: myproject');
+  });
 });
 
 describe('CLI: audit', () => {
