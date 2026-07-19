@@ -81,6 +81,19 @@ export function exportManifest(checkResult: CheckResult, options: ExportOptions)
   if (options.outputPath) {
     const resolvedOutput = path.resolve(options.outputPath);
     fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+    // The caller-side cwd fence only canonicalizes the parent directory — if a symlink already
+    // sits at the exact target filename (explicit --output, or a predictable auto-generated one),
+    // writeFileSync would follow it and overwrite whatever it points at, anywhere on disk. Refuse
+    // outright rather than following an existing symlink for a write.
+    let existingStat: fs.Stats | undefined;
+    try {
+      existingStat = fs.lstatSync(resolvedOutput);
+    } catch {
+      // nothing at this path yet — normal case, nothing to guard against
+    }
+    if (existingStat?.isSymbolicLink()) {
+      throw new Error(`Refusing to write through existing symlink: ${resolvedOutput}`);
+    }
     fs.writeFileSync(resolvedOutput, finalContent, 'utf-8');
     outputPath = resolvedOutput;
   }

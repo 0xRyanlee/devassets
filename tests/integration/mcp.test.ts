@@ -82,6 +82,18 @@ describe('MCP server: devassets_add_project sensitive-path guard', () => {
     const result = await client.callTool({ name: 'devassets_add_project', arguments: { id: 'homehack', name: 'homehack', path: TMP } });
     expect(textOf(result).error).toContain('home directory');
   });
+
+  it('refuses a symlink whose real target is the home directory', async () => {
+    const linkPath = path.join(os.tmpdir(), 'devassets-mcp-home-symlink-test');
+    fs.rmSync(linkPath, { force: true });
+    fs.symlinkSync(TMP, linkPath, 'dir');
+    try {
+      const result = await client.callTool({ name: 'devassets_add_project', arguments: { id: 'homehacklink', name: 'homehacklink', path: linkPath } });
+      expect(textOf(result).error).toContain('home directory');
+    } finally {
+      fs.rmSync(linkPath, { force: true });
+    }
+  });
 });
 
 describe('MCP server: vault secrets', () => {
@@ -111,6 +123,27 @@ describe('MCP server: devassets_export path handling', () => {
     const outputPath = path.resolve(data.outputPath);
     expect(outputPath.startsWith(process.cwd() + path.sep)).toBe(true);
     fs.rmSync(outputPath, { force: true });
+  });
+
+  it('refuses to write through a pre-existing symlink at the output path', async () => {
+    const outsideTarget = path.join(os.tmpdir(), 'devassets-mcp-export-symlink-canary.yml');
+    fs.writeFileSync(outsideTarget, 'canary: untouched\n');
+    const linkName = 'export-symlink-test.yml';
+    const linkPath = path.join(process.cwd(), linkName);
+    fs.rmSync(linkPath, { force: true });
+    fs.symlinkSync(outsideTarget, linkPath);
+    try {
+      const result = await client.callTool({
+        name: 'devassets_export',
+        arguments: { project: 'mcpproject', format: 'manifest', output_path: linkName },
+      });
+      const data = textOf(result);
+      expect(data.error).toBeDefined();
+      expect(fs.readFileSync(outsideTarget, 'utf-8')).toBe('canary: untouched\n');
+    } finally {
+      fs.rmSync(linkPath, { force: true });
+      fs.rmSync(outsideTarget, { force: true });
+    }
   });
 });
 

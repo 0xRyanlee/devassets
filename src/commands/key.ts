@@ -4,6 +4,25 @@ import { encryptAES, decryptAES } from '../utils/crypto.js';
 import { SIGNATURE_KEY_PATH } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
 import { addAuditLog, getCurrentUser } from '../db/queries.js';
+import { isSameFile } from '../utils/fs-safety.js';
+
+// Writes via a same-directory temp file + atomic rename, verifying the full byte count was
+// written before renaming over the target. A crash or short write mid-operation leaves the
+// original target file untouched instead of a truncated/corrupted key or backup.
+function atomicWriteFile(targetPath: string, data: Buffer, mode: number) {
+  const tmpPath = `${targetPath}.${process.pid}.tmp`;
+  const fd = fs.openSync(tmpPath, fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_TRUNC, mode);
+  try {
+    const written = fs.writeSync(fd, data);
+    if (written !== data.length) {
+      throw new Error(`Short write: wrote ${written} of ${data.length} bytes to ${tmpPath}`);
+    }
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmpPath, targetPath);
+}
 
 interface KeyExportOptions {
   encryptFor?: string;
@@ -28,16 +47,20 @@ export function keyExportCommand(options: KeyExportOptions) {
     process.exit(1);
   }
 
-  const keyBytes = fs.readFileSync(SIGNATURE_KEY_PATH);
-  const encrypted = encryptAES(keyBytes.toString('base64'), options.encryptFor);
   const outputPath = path.resolve(options.output ?? `devassets-key-backup-${new Date().toISOString().split('T')[0]}.enc`);
 
-  const fd = fs.openSync(outputPath, fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_TRUNC, 0o600);
-  try {
-    fs.writeSync(fd, encrypted);
-  } finally {
-    fs.closeSync(fd);
+  // Reading signature.key then O_TRUNC-writing the encrypted backup over that SAME path (directly,
+  // or via a symlink/hardlink) would overwrite the real 32-byte key with ciphertext text — which
+  // still passes getSignatureKey()'s length check, so it'd be silently treated as the new key and
+  // every existing vault secret would become permanently undecryptable.
+  if (fs.existsSync(outputPath) && isSameFile(outputPath, SIGNATURE_KEY_PATH)) {
+    logger.error(`--output must not be signature.key itself (or a symlink/hardlink to it): ${outputPath}`);
+    process.exit(1);
   }
+
+  const keyBytes = fs.readFileSync(SIGNATURE_KEY_PATH);
+  const encrypted = encryptAES(keyBytes.toString('base64'), options.encryptFor);
+  atomicWriteFile(outputPath, Buffer.from(encrypted), 0o600);
 
   addAuditLog({ projectId: '_global', action: 'key-export', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { outputPath }, result: 'success' });
 
@@ -88,12 +111,7 @@ export function keyRestoreCommand(file: string, options: KeyRestoreOptions) {
   }
 
   fs.mkdirSync(path.dirname(SIGNATURE_KEY_PATH), { recursive: true });
-  const fd = fs.openSync(SIGNATURE_KEY_PATH, fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_TRUNC, 0o600);
-  try {
-    fs.writeSync(fd, keyBytes);
-  } finally {
-    fs.closeSync(fd);
-  }
+  atomicWriteFile(SIGNATURE_KEY_PATH, keyBytes, 0o600);
 
   addAuditLog({ projectId: '_global', action: 'key-restore', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { file }, result: 'success' });
 

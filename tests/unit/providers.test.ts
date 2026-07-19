@@ -103,6 +103,35 @@ describe('gcloud.resolve (offline)', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('refuses a credential path that is lexically inside the project but a symlink pointing outside', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-symlink-proj-'));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-symlink-outside-'));
+    const realCredPath = path.join(outsideDir, 'real-service-account.json');
+    fs.writeFileSync(realCredPath, JSON.stringify({ client_email: 'real@victim.iam.gserviceaccount.com', project_id: 'victim-proj' }));
+    const linkPath = path.join(projectPath, 'service-account.json');
+    fs.symlinkSync(realCredPath, linkPath);
+    try {
+      const r = await gcloud.resolve(linkPath, { projectPath });
+      expect(r.valid).toBe(false);
+      expect(r.error).toContain('outside the project directory');
+    } finally {
+      fs.rmSync(projectPath, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a relative credential path against the project path, not process.cwd()', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-relative-'));
+    fs.writeFileSync(path.join(projectPath, 'service-account.json'), JSON.stringify({ client_email: 'sa@proj.iam.gserviceaccount.com', project_id: 'relative-proj' }));
+    try {
+      const r = await gcloud.resolve('service-account.json', { projectPath });
+      expect(r.valid).toBe(true);
+      expect(r.workspace).toBe('relative-proj');
+    } finally {
+      fs.rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('vercel.resolve (mocked)', () => {

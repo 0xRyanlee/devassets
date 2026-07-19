@@ -87,6 +87,26 @@ describe('resolveScanRoots — layer 1 (.devassets.yml override)', () => {
       fs.rmSync(sibling, { recursive: true, force: true });
     }
   });
+
+  it('rejects a root that is a symlink pointing outside the project directory', () => {
+    // A lexically-contained path ("linked-sibling") that's actually a symlink escaping DIR — the
+    // ../ check alone wouldn't catch this since the roots.yml entry itself contains no "..".
+    const siblingName = `devassets-roots-symlink-target-${path.basename(DIR)}`;
+    const sibling = path.join(path.dirname(DIR), siblingName);
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.writeFileSync(path.join(sibling, '.env'), 'SIBLING_SECRET=leaked\n');
+    const linkPath = path.join(DIR, 'linked-sibling');
+    try {
+      fs.symlinkSync(sibling, linkPath, 'dir');
+      mk('.devassets.yml', 'roots:\n  - linked-sibling\n');
+      const roots = resolveScanRoots(DIR);
+      expect(roots).not.toContain('linked-sibling');
+      expect(roots).toEqual(['.']);
+    } finally {
+      fs.rmSync(linkPath, { force: true });
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('resolveScanRoots — fallback', () => {

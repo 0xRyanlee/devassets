@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { ENV_FILE_PATTERNS, EXAMPLE_FILE_PATTERNS } from '../utils/constants.js';
 import { readEnvValue } from '../utils/dotenv.js';
 import { logger } from '../utils/logger.js';
+import { isWithinRealPath } from '../utils/fs-safety.js';
 
 // Transiently read a secret value across all scan roots (monorepo-aware). Never persisted.
 export function readProjectEnvValue(projectPath: string, keyName: string): string | undefined {
@@ -41,11 +42,11 @@ export function resolveScanRoots(projectPath: string): string[] {
 // that file is untrusted input, since it can come from any registered/scanned repo) must never
 // reach scanner.ts/readEnvValue: those treat projectPath+root as the new trust boundary, so an
 // escaped root would let scanning/env-value reads leak into a sibling project's directory.
+// Compares REAL (symlink-resolved) paths, not lexical ones — a `roots:` entry that's a symlink to
+// a sibling project would pass a lexical containment check while still resolving outside.
 function isWithinProject(projectPath: string, rel: string): boolean {
   if (rel === '.' || rel === '') return true;
-  const abs = path.resolve(projectPath, rel);
-  const root = path.resolve(projectPath);
-  return abs === root || abs.startsWith(root + path.sep);
+  return isWithinRealPath(projectPath, path.join(projectPath, rel));
 }
 
 function dedupeWithRoot(projectPath: string, roots: string[]): string[] {

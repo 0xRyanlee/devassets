@@ -522,6 +522,30 @@ describe('CLI: run', () => {
 
 describe('CLI: key-export / key-restore', () => {
   const BACKUP_PATH = path.join(TMP, 'key-backup.enc');
+  const SIGNATURE_KEY_PATH = path.join(TMP, '.devassets', 'signature.key');
+
+  it('refuses --output pointing at signature.key itself', () => {
+    const before = fs.readFileSync(SIGNATURE_KEY_PATH);
+    const { status, stderr } = cli(`key-export --encrypt-for=backup-password-123 --output=${SIGNATURE_KEY_PATH}`);
+    expect(status).toBe(1);
+    expect(stderr).toContain('must not be signature.key itself');
+    expect(fs.readFileSync(SIGNATURE_KEY_PATH).equals(before)).toBe(true); // untouched
+  });
+
+  it('refuses --output pointing at a symlink to signature.key', () => {
+    const linkPath = path.join(TMP, 'signature-key-link.enc');
+    fs.rmSync(linkPath, { force: true });
+    fs.symlinkSync(SIGNATURE_KEY_PATH, linkPath);
+    const before = fs.readFileSync(SIGNATURE_KEY_PATH);
+    try {
+      const { status, stderr } = cli(`key-export --encrypt-for=backup-password-123 --output=${linkPath}`);
+      expect(status).toBe(1);
+      expect(stderr).toContain('must not be signature.key itself');
+      expect(fs.readFileSync(SIGNATURE_KEY_PATH).equals(before)).toBe(true); // untouched
+    } finally {
+      fs.rmSync(linkPath, { force: true });
+    }
+  });
 
   it('exports the signature key as a password-encrypted file', () => {
     expect(cli('set myproject KEY_BACKUP_TEST_SECRET before-restore --env=staging').status).toBe(0);

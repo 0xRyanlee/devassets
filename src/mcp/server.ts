@@ -306,17 +306,21 @@ export async function startMcpServer() {
       if (id === '_global') {
         return textResult({ error: `"_global" is a reserved project ID for account-level credentials. Use devassets_set_global_secret to store global keys.` });
       }
-      const resolvedPath = path.resolve(projectPath);
+      let resolvedPath: string;
       try {
-        const stat = fs.statSync(resolvedPath);
+        const stat = fs.statSync(path.resolve(projectPath));
         if (!stat.isDirectory()) throw new Error('Not a directory');
+        // Canonicalize (follow symlinks) so both the guard below and the path actually stored in
+        // the DB reflect the real directory — a `/tmp/link -> $HOME` symlink would otherwise pass
+        // a lexical containment check while every subsequent scan walks the real $HOME through it.
+        resolvedPath = fs.realpathSync(path.resolve(projectPath));
       } catch {
         return textResult({ error: `Path does not exist or is not a directory: ${projectPath}` });
       }
       // Block registering the home directory itself or anything above it — a blacklist of
       // specific dotfile dirs (~/.ssh etc.) doesn't stop e.g. registering all of $HOME, which
       // would let a subsequent devassets_scan walk every unrelated project on the machine.
-      const home = path.resolve(os.homedir());
+      const home = fs.realpathSync(os.homedir());
       const isHomeOrAncestor = resolvedPath === home || home === resolvedPath || home.startsWith(resolvedPath + path.sep);
       const isFilesystemRoot = resolvedPath === path.parse(resolvedPath).root;
       const sensitiveRoots = ['/.ssh', '/.gnupg', '/.aws', '/.config/gcloud'];
