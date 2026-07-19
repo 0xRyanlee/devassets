@@ -453,6 +453,26 @@ All data stays on your machine. No cloud sync, no account, no telemetry.
 
 ---
 
+## Documentation Map
+
+This README is the only doc most users need. For contributors, `docs/` has more — but not all
+of it reflects current behavior, so here's where to actually look:
+
+| Doc | Read this for | Status |
+|---|---|---|
+| **README.md** (this file) | Installing, using the CLI/MCP, current commands | Current |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Module layout, runtime stack, how a scan/check/export actually works | Current |
+| **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Original Week 1–7 build plan | Historical — self-annotated, points to ARCHITECTURE.md |
+| **[docs/DEVELOPMENT_REPORT_20260608.md](docs/DEVELOPMENT_REPORT_20260608.md)** | What shipped as of 2026-06-08 | Historical snapshot, not updated since |
+| **docs/PRD.md** | Original 2025-06-07 product design (DB path, ORM, and Skills design have all since changed) | Historical — banner points to ARCHITECTURE.md/README |
+| **docs/SKILLS.md** | Original Skills interface design (superseded by the current MCP tools) | Historical — banner points to README's MCP Integration section |
+
+**Rule of thumb**: if a doc doesn't say "Historical" at the top and isn't this README or
+ARCHITECTURE.md, verify it against the actual source before trusting it — `docs/` accumulates
+design notes and reports that were accurate when written but not maintained afterward.
+
+---
+
 ## License
 
 MIT — part of [Hyphen Network](https://github.com/0xRyanlee).
