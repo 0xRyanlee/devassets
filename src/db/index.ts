@@ -21,7 +21,13 @@ export function getDb(): DatabaseSync {
       throw new Error(`Cannot create DevAssets config directory at ${DEVASSETS_DIR}: ${msg}\nRun with sufficient permissions or set a writable HOME directory.`);
     }
     try {
+      // Create the file (if it doesn't exist yet) with mode 0600 atomically via the open flags,
+      // rather than open-then-chmod — the latter has a window where a wide process umask leaves
+      // the file briefly readable by other local users before chmodSync runs.
+      const fd = fs.openSync(DB_PATH, fs.constants.O_CREAT | fs.constants.O_RDWR, 0o600);
+      fs.closeSync(fd);
       _db = new DatabaseSync(DB_PATH);
+      // Also correct permissions on a pre-existing DB from before this fix shipped.
       fs.chmodSync(DB_PATH, 0o600);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -58,7 +64,7 @@ function runMigrations(db: DatabaseSync) {
       status TEXT NOT NULL DEFAULT 'configured',
       environment TEXT,
       last_seen TEXT NOT NULL,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
     CREATE TABLE IF NOT EXISTS payment_platforms (
@@ -68,7 +74,7 @@ function runMigrations(db: DatabaseSync) {
       status TEXT NOT NULL DEFAULT 'unconfigured',
       last_verified TEXT,
       metadata TEXT,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -94,7 +100,7 @@ function runMigrations(db: DatabaseSync) {
       expected_workspace TEXT,
       checked_at TEXT NOT NULL,
       PRIMARY KEY (project_id, key_name),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_assets_project ON assets(project_id);
@@ -116,19 +122,28 @@ function runMigrations(db: DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(project_id, env, key),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id)
     );
     CREATE INDEX IF NOT EXISTS idx_secret_values_project ON secret_values(project_id);
   `);
 
-  // Idempotent column addition — scope distinguishes global (account-level) vs project-scoped secrets
-  try {
-    db.exec(`ALTER TABLE secret_values ADD COLUMN scope TEXT NOT NULL DEFAULT 'project'`);
-  } catch {
-    // column already exists
-  }
+  // PRAGMA user_version gates the ALTER TABLE block below so it only actually runs once (the
+  // first launch after upgrading), instead of every single CLI invocation trying 3 ALTER
+  // TABLEs and catching the "column already exists" exception each time.
+  const CURRENT_SCHEMA_VERSION = 1;
+  const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number };
+  if (version < CURRENT_SCHEMA_VERSION) {
+    // Idempotent column addition — scope distinguishes global (account-level) vs project-scoped secrets
+    try {
+      db.exec(`ALTER TABLE secret_values ADD COLUMN scope TEXT NOT NULL DEFAULT 'project'`);
+    } catch {
+      // column already exists
+    }
 
-  // Idempotent additions for file-type secret support
-  try { db.exec(`ALTER TABLE secret_values ADD COLUMN encoding TEXT NOT NULL DEFAULT 'utf8'`); } catch { /* exists */ }
-  try { db.exec(`ALTER TABLE secret_values ADD COLUMN original_filename TEXT`); } catch { /* exists */ }
+    // Idempotent additions for file-type secret support
+    try { db.exec(`ALTER TABLE secret_values ADD COLUMN encoding TEXT NOT NULL DEFAULT 'utf8'`); } catch { /* exists */ }
+    try { db.exec(`ALTER TABLE secret_values ADD COLUMN original_filename TEXT`); } catch { /* exists */ }
+
+    db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`);
+  }
 }
