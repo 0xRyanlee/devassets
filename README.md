@@ -302,6 +302,8 @@ devassets identity myapp
 | Command | Description |
 |---|---|
 | `devassets init` | Initialize database and signing key |
+| `devassets key-export` | Back up the vault signature key as a password-encrypted file — **do this now**, losing signature.key makes every stored secret permanently unrecoverable |
+| `devassets key-restore <file>` | Restore the signature key from a `key-export` backup |
 | `devassets add-project <name>` | Register a project |
 | `devassets import` | Batch-register every subdirectory under `--root` as a project (onboarding an existing multi-project setup) |
 | `devassets delete-project <project>` | Remove a project and its vault secrets; `--force` to skip confirmation (CI) |

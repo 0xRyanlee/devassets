@@ -24,6 +24,7 @@ import { injectCommand } from './commands/inject.js';
 import { runCommand } from './commands/run.js';
 import { ipcCommand } from './commands/ipc.js';
 import { deleteProjectCommand } from './commands/delete-project.js';
+import { keyExportCommand, keyRestoreCommand } from './commands/key.js';
 
 const program = new Command();
 
@@ -44,6 +45,20 @@ program
   .command('init')
   .description('Initialize DevAssets (creates DB, signature key, permissions file)')
   .action(initCommand);
+
+program
+  .command('key-export')
+  .description('Back up the vault signature key as a password-encrypted file (losing the key makes the whole vault permanently unrecoverable)')
+  .option('--encrypt-for <password>', 'Password to encrypt the backup with (required, min 8 characters)')
+  .option('--output <path>', 'Output file path (default: ./devassets-key-backup-<date>.enc)')
+  .action(keyExportCommand);
+
+program
+  .command('key-restore <file>')
+  .description('Restore the vault signature key from a devassets key-export backup')
+  .option('--password <password>', 'Password the backup was encrypted with (required)')
+  .option('--force', 'Overwrite an existing signature key (only if intentionally restoring an older backup)')
+  .action(keyRestoreCommand);
 
 program
   .command('add-project <name>')

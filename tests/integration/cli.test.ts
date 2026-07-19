@@ -503,6 +503,42 @@ describe('CLI: run', () => {
   });
 });
 
+describe('CLI: key-export / key-restore', () => {
+  const BACKUP_PATH = path.join(TMP, 'key-backup.enc');
+
+  it('exports the signature key as a password-encrypted file', () => {
+    expect(cli('set myproject KEY_BACKUP_TEST_SECRET before-restore --env=staging').status).toBe(0);
+    const { status, stdout } = cli(`key-export --encrypt-for=backup-password-123 --output=${BACKUP_PATH}`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('backed up');
+    expect(fs.existsSync(BACKUP_PATH)).toBe(true);
+  });
+
+  it('refuses to restore over an existing key without --force', () => {
+    const { status, stdout } = cli(`key-restore ${BACKUP_PATH} --password=backup-password-123`);
+    expect(status).toBe(1);
+    expect(stdout).toContain('--force');
+  });
+
+  it('refuses a wrong password and leaves the current key untouched', () => {
+    const { status, stderr } = cli(`key-restore ${BACKUP_PATH} --password=wrong-password --force`);
+    expect(status).toBe(1);
+    expect(stderr).toContain('Could not decrypt');
+
+    const { status: getStatus } = cli('get myproject KEY_BACKUP_TEST_SECRET --env=staging');
+    expect(getStatus).toBe(0); // still decryptable — the failed restore never touched signature.key
+  });
+
+  it('restores the exact same key, preserving access to previously-encrypted secrets', () => {
+    const { status } = cli(`key-restore ${BACKUP_PATH} --password=backup-password-123 --force`);
+    expect(status).toBe(0);
+
+    const { stdout, status: getStatus } = cli('get myproject KEY_BACKUP_TEST_SECRET --env=staging');
+    expect(getStatus).toBe(0);
+    expect(stdout.trim()).toBe('before-restore');
+  });
+});
+
 describe('CLI: error handling', () => {
   it('exits 1 for unknown project', () => {
     const { status } = cli('scan nonexistent');

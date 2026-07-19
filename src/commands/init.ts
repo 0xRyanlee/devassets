@@ -22,7 +22,8 @@ export function initCommand() {
     logger.raw('     • Add ~/.devassets/ to iCloud Drive exclusions (System Settings → iCloud → iCloud Drive → Options)');
     logger.raw('     • Add to Time Machine exclusions if applicable');
     logger.raw('     • Add to your dotfiles .gitignore: echo "~/.devassets/" >> ~/.gitignore_global');
-    logger.raw('   Loss of signature.key means all stored secrets are permanently unrecoverable.');
+    logger.raw('   Loss of signature.key means all stored secrets are permanently unrecoverable —');
+    logger.raw('   back it up now: devassets key-export --encrypt-for <password>');
     logger.raw('');
     logger.raw('Next steps:');
     logger.raw('  1. devassets add-project <name> --path=<path>');
