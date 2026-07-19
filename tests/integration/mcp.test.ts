@@ -75,6 +75,20 @@ describe('MCP server: devassets_resolve_project', () => {
     const result = await client.callTool({ name: 'devassets_resolve_project', arguments: { cwd: os.tmpdir() } });
     expect(textOf(result).found).toBe(false);
   });
+
+  it('picks the most specific (deepest) project when a parent and a nested project are both registered', async () => {
+    const nestedPath = path.join(PROJECT_PATH, 'nested-app');
+    fs.mkdirSync(nestedPath, { recursive: true });
+    run(`add-project nested-app --path=${nestedPath} --type=saas`);
+    try {
+      const result = await client.callTool({ name: 'devassets_resolve_project', arguments: { cwd: path.join(nestedPath, 'src') } });
+      const data = textOf(result);
+      expect(data.found).toBe(true);
+      expect(data.project.id).toBe('nested-app'); // not "mcpproject", the shallower parent
+    } finally {
+      run(`delete-project nested-app --force`);
+    }
+  });
 });
 
 describe('MCP server: devassets_add_project sensitive-path guard', () => {

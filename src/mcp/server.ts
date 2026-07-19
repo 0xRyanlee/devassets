@@ -15,6 +15,7 @@ import { buildDoctorReport } from '../commands/doctor.js';
 import { generateCiSnippet } from '../core/ci.js';
 import { DEFAULT_ENV } from '../utils/constants.js';
 import { VERSION } from '../utils/version.js';
+import { realOrResolved } from '../utils/fs-safety.js';
 
 const PROJECT_ID_PATTERN = /^[a-zA-Z0-9_.-]+$/;
 
@@ -61,15 +62,18 @@ export async function startMcpServer() {
       cwd: z.string().describe('Absolute path to resolve (e.g. the calling agent\'s current working directory)'),
     },
     async ({ cwd }) => {
-      const resolved = path.resolve(cwd);
+      const resolved = realOrResolved(cwd);
       const projects = listProjects().filter(p => p.id !== '_global');
-      const match = projects.find(p => {
-        const projectPath = path.resolve(p.path);
+      const matches = projects.filter(p => {
+        const projectPath = realOrResolved(p.path);
         return resolved === projectPath || resolved.startsWith(projectPath + path.sep);
       });
-      if (!match) {
+      if (matches.length === 0) {
         return textResult({ found: false, cwd: resolved, message: 'No registered project contains this directory. Run devassets_add_project to register it.' });
       }
+      // If both a parent and a nested project are registered (e.g. /repo and /repo/app), the
+      // most specific (longest/deepest path) match is the right one, not registration order.
+      const match = matches.reduce((best, p) => p.path.length > best.path.length ? p : best);
       return textResult({ found: true, cwd: resolved, project: { id: match.id, name: match.name, path: match.path, type: match.type } });
     }
   );

@@ -1,16 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 
-// Resolves to the real (symlink-free) canonical form when possible; falls back to the lexical
-// path.resolve() result when the path doesn't exist yet (nothing to canonicalize) or a component
-// isn't accessible. Every boundary/containment check in this codebase must compare REAL paths —
-// a lexical path.resolve() comparison can be bypassed by a symlink whose lexical path looks
-// contained but whose target isn't.
+// Resolves to the real (symlink-free) canonical form. If the path doesn't fully exist yet (a
+// scan root that hasn't been created, an agent-supplied cwd one level below a real directory),
+// canonicalizes the deepest EXISTING ancestor and reattaches the remaining segments as-is —
+// falling back to a fully lexical path.resolve() would silently stop canonicalizing partway
+// through and no longer compare consistently against a sibling path that did fully resolve (e.g.
+// macOS aliases /tmp -> /private/tmp: a resolved existing project path becomes
+// /private/var/folders/..., but a lexical resolve of a non-existent child under the same parent
+// would stay /var/folders/..., breaking prefix comparisons between the two).
 export function realOrResolved(p: string): string {
+  const abs = path.resolve(p);
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync(abs);
   } catch {
-    return path.resolve(p);
+    const parent = path.dirname(abs);
+    if (parent === abs) return abs; // reached the filesystem root — nothing left to canonicalize
+    return path.join(realOrResolved(parent), path.basename(abs));
   }
 }
 
