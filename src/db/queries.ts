@@ -370,6 +370,41 @@ export function getGlobalSecret(key: string, env: string): string | undefined {
   return getVaultSecret('_global', env, key);
 }
 
+export interface ResolvedInjectionSecret {
+  key: string;
+  value: string;
+  sourceProjectId: string;
+}
+
+// Shared by `inject` and `run`: merges project-scoped and _global vault entries (project keys
+// shadow same-named global keys), optionally filters to a specific key list, then resolves each
+// to its plaintext value. A single entry failing to decrypt (vault key mismatch) is skipped
+// rather than aborting the whole batch.
+export function resolveInjectionTargets(
+  projectId: string,
+  env: string,
+  keys?: string[],
+): ResolvedInjectionSecret[] {
+  const own = listVaultSecrets(projectId, env);
+  const globalAll = projectId === '_global' ? [] : listVaultSecrets('_global', env);
+  const ownKeys = new Set(own.map(s => s.key));
+  const globalOnly = globalAll.filter(s => !ownKeys.has(s.key));
+  const merged = [...globalOnly, ...own];
+  const filtered = keys && keys.length > 0 ? merged.filter(s => keys.includes(s.key)) : merged;
+
+  const resolved: ResolvedInjectionSecret[] = [];
+  for (const meta of filtered) {
+    const sourceProjectId = globalOnly.some(g => g.key === meta.key) ? '_global' : projectId;
+    try {
+      const value = getVaultSecret(sourceProjectId, env, meta.key);
+      if (value !== undefined) resolved.push({ key: meta.key, value, sourceProjectId });
+    } catch {
+      // vault key mismatch on this entry — skip rather than aborting the whole injection
+    }
+  }
+  return resolved;
+}
+
 // Return count of vault secrets per project (no values), used for doctor summary.
 export function getVaultSecretCounts(): Record<string, number> {
   const db = getDb();

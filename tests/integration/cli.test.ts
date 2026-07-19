@@ -346,6 +346,62 @@ describe('CLI: vault (set / get / list / unset)', () => {
   });
 });
 
+describe('CLI: inject', () => {
+  it('injects vault secrets and records an audit log entry', () => {
+    expect(cli('set myproject INJECT_TEST_KEY hello --env=staging').status).toBe(0);
+    const { stdout, status } = cli('inject myproject --env=staging --print');
+    expect(status).toBe(0);
+    expect(stdout).toContain("export INJECT_TEST_KEY='hello'");
+
+    const audit = JSON.parse(cli('audit myproject --format=json').stdout);
+    expect(audit.some((l: { action: string }) => l.action === 'inject')).toBe(true);
+  });
+
+  it('reports and exits cleanly when there is nothing to inject', () => {
+    const { stdout, status } = cli('inject myproject --env=nonexistent-env-xyz');
+    expect(status).toBe(0);
+    expect(stdout).toContain('No secrets to inject');
+  });
+});
+
+describe('CLI: run', () => {
+  // cli() splits on plain spaces (no shell involved), so test commands must avoid
+  // spaces/quoting — a tiny fixture script sidesteps that instead of inline -e code.
+  const PRINT_ENV_SCRIPT = path.join(TMP, 'print-env.cjs');
+  const EXIT_CODE_SCRIPT = path.join(TMP, 'exit-code.cjs');
+
+  beforeAll(() => {
+    fs.writeFileSync(PRINT_ENV_SCRIPT, "process.stdout.write(process.env[process.argv[2]]||'');");
+    fs.writeFileSync(EXIT_CODE_SCRIPT, 'process.exit(Number(process.argv[2]));');
+  });
+
+  it('injects secrets into the child process environment', () => {
+    expect(cli('set myproject RUN_TEST_KEY world --env=staging').status).toBe(0);
+    const { stdout, status } = cli(`run myproject --env=staging -- node ${PRINT_ENV_SCRIPT} RUN_TEST_KEY`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('world');
+
+    const audit = JSON.parse(cli('audit myproject --format=json').stdout);
+    const runLog = audit.find((l: { action: string }) => l.action === 'run');
+    expect(runLog).toBeDefined();
+    expect(runLog.result).toBe('success');
+  });
+
+  it('propagates the child process exit code', () => {
+    const { status } = cli(`run myproject --env=staging -- node ${EXIT_CODE_SCRIPT} 3`);
+    expect(status).toBe(3);
+  });
+
+  it('exits 127 and logs a failure when the command does not exist', () => {
+    const { status } = cli('run myproject --env=staging -- devassets-nonexistent-binary-xyz');
+    expect(status).toBe(127);
+
+    const audit = JSON.parse(cli('audit myproject --format=json').stdout);
+    const failureLog = audit.find((l: { action: string; result: string }) => l.action === 'run' && l.result === 'failure');
+    expect(failureLog).toBeDefined();
+  });
+});
+
 describe('CLI: error handling', () => {
   it('exits 1 for unknown project', () => {
     const { status } = cli('scan nonexistent');

@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { getProject, listVaultSecrets, getVaultSecret } from '../db/queries.js';
+import { getProject, resolveInjectionTargets, addAuditLog, getCurrentUser } from '../db/queries.js';
 import { logger } from '../utils/logger.js';
 
 interface RunOptions {
@@ -20,33 +20,14 @@ export function runCommand(projectId: string, args: string[], options: RunOption
   }
 
   const env = options.env ?? 'local';
-  const all = listVaultSecrets(projectId, env);
+  const resolved = resolveInjectionTargets(projectId, env, options.keys);
 
-  // Merge global vault; project-specific keys take precedence over global
-  const globalAll = projectId === '_global' ? [] : listVaultSecrets('_global', env);
-  const projectKeys = new Set(all.map(s => s.key));
-  const globalOnly = globalAll.filter(s => !projectKeys.has(s.key));
-  const merged = [...globalOnly, ...all];
-
-  const targets = options.keys && options.keys.length > 0
-    ? merged.filter(s => options.keys!.includes(s.key))
-    : merged;
-
-  if (targets.length === 0) {
+  if (resolved.length === 0) {
     logger.warn(`No secrets found for ${project.name} [${env}]; running without injection`);
   }
 
   const injected: Record<string, string> = {};
-  for (const meta of targets) {
-    const sourceProjectId = globalOnly.some(g => g.key === meta.key) ? '_global' : projectId;
-    try {
-      const value = getVaultSecret(sourceProjectId, env, meta.key);
-      if (value !== undefined) injected[meta.key] = value;
-    } catch (err) {
-      logger.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
-    }
-  }
+  for (const { key, value } of resolved) injected[key] = value;
 
   const child = spawnSync(args[0], args.slice(1), {
     stdio: 'inherit',
@@ -54,9 +35,26 @@ export function runCommand(projectId: string, args: string[], options: RunOption
   });
 
   if (child.error) {
+    addAuditLog({
+      projectId,
+      action: 'run',
+      user: getCurrentUser(),
+      timestamp: new Date().toISOString(),
+      details: { env, keys: Object.keys(injected), command: args[0] },
+      result: 'failure',
+    });
     logger.error(`Failed to start command: ${child.error.message}`);
     process.exit(127);
   }
+
+  addAuditLog({
+    projectId,
+    action: 'run',
+    user: getCurrentUser(),
+    timestamp: new Date().toISOString(),
+    details: { env, keys: Object.keys(injected), command: args[0], exitStatus: child.status, signal: child.signal ?? undefined },
+    result: 'success',
+  });
 
   if (child.signal) {
     // POSIX convention: 128 + signal number

@@ -201,10 +201,10 @@ program
   .option('--keys <keys>', 'Comma-separated list of keys to inject (default: all)', (v) => v.split(','))
   .allowUnknownOption()
   .action((projectId: string, options: { env?: string; keys?: string[] }, cmd) => {
-    // cmd.args are the unparsed tokens after the positional argument.
-    // commander strips '--' separator; drop it if present for robustness.
-    const raw: string[] = cmd.args as string[];
-    const args = raw[0] === '--' ? raw.slice(1) : raw;
+    // Commander (v12) puts every positional arg into cmd.args, including the declared
+    // <project> — it's cmd.args[0], duplicating the already-captured projectId parameter.
+    // The trailing "-- <cmd> [args...]" tokens start at index 1.
+    const args = (cmd.args as string[]).slice(1);
     runCommand(projectId, args, options);
   });
 
