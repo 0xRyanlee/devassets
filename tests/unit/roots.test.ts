@@ -70,6 +70,23 @@ describe('resolveScanRoots — layer 1 (.devassets.yml override)', () => {
     expect(roots).toContain('frontend');
     expect(roots).not.toContain('other');
   });
+
+  it('rejects a root that escapes the project directory via ../', () => {
+    // A sibling directory outside DIR with its own .env — simulates another real
+    // project's secrets sitting next to this (untrusted/malicious) one.
+    const siblingName = `devassets-roots-sibling-${path.basename(DIR)}`;
+    const sibling = path.join(path.dirname(DIR), siblingName);
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.writeFileSync(path.join(sibling, '.env'), 'SIBLING_SECRET=leaked\n');
+    try {
+      mk('.devassets.yml', `roots:\n  - ../${siblingName}\n`);
+      const roots = resolveScanRoots(DIR);
+      expect(roots.some(r => r.includes('..'))).toBe(false);
+      expect(roots).toEqual(['.']); // falls back — nothing valid found within DIR itself
+    } finally {
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('resolveScanRoots — fallback', () => {

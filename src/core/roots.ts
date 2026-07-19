@@ -37,10 +37,25 @@ export function resolveScanRoots(projectPath: string): string[] {
   return dedupeWithRoot(projectPath, discoverRoots(projectPath));
 }
 
+// A root that resolves outside projectPath (e.g. a ".devassets.yml roots: ['../../../']" entry —
+// that file is untrusted input, since it can come from any registered/scanned repo) must never
+// reach scanner.ts/readEnvValue: those treat projectPath+root as the new trust boundary, so an
+// escaped root would let scanning/env-value reads leak into a sibling project's directory.
+function isWithinProject(projectPath: string, rel: string): boolean {
+  if (rel === '.' || rel === '') return true;
+  const abs = path.resolve(projectPath, rel);
+  const root = path.resolve(projectPath);
+  return abs === root || abs.startsWith(root + path.sep);
+}
+
 function dedupeWithRoot(projectPath: string, roots: string[]): string[] {
   const set = new Set<string>();
   if (hasEnvFile(projectPath)) set.add('.');
   for (const r of roots) {
+    if (!isWithinProject(projectPath, r)) {
+      logger.warn(`Scan root "${r}" resolves outside the project directory — ignored`);
+      continue;
+    }
     const abs = path.join(projectPath, r);
     if (hasEnvFile(abs)) set.add(r === '' ? '.' : r);
   }
