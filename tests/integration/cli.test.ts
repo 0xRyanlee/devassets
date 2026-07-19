@@ -211,6 +211,91 @@ describe('CLI: audit', () => {
   });
 });
 
+describe('CLI: rotate', () => {
+  it('--yes records rotation intent without prompting', () => {
+    const { stdout, status } = cli('rotate myproject SOME_API_KEY --yes');
+    expect(status).toBe(0);
+    expect(stdout).toContain('Rotation initiated');
+
+    const audit = JSON.parse(cli('audit myproject --action=rotate --format=json').stdout);
+    expect(audit.some((l: { details?: { keyName?: string } }) => l.details?.keyName === 'SOME_API_KEY')).toBe(true);
+  });
+
+  it('requires --yes in a non-interactive shell', () => {
+    const { status, stderr } = cli('rotate myproject SOME_API_KEY');
+    expect(status).toBe(1);
+    expect(stderr).toContain('confirmation required');
+  });
+
+  it('exits 1 for unknown project', () => {
+    const { status } = cli('rotate nonexistent SOME_KEY --yes');
+    expect(status).toBe(1);
+  });
+});
+
+describe('CLI: delete-project', () => {
+  const DOOMED_PATH = path.join(TMP, 'doomed-project');
+
+  it('refuses to delete _global', () => {
+    const { status } = cli('delete-project _global --force');
+    expect(status).toBe(1);
+  });
+
+  it('exits 1 for unknown project', () => {
+    const { status } = cli('delete-project nonexistent --force');
+    expect(status).toBe(1);
+  });
+
+  it('--force removes the project and its vault secrets without prompting', () => {
+    fs.mkdirSync(DOOMED_PATH, { recursive: true });
+    expect(cli(`add-project doomed --path=${DOOMED_PATH}`).status).toBe(0);
+    expect(cli('set doomed DOOMED_KEY willbegone').status).toBe(0);
+
+    const { stdout, status } = cli('delete-project doomed --force');
+    expect(status).toBe(0);
+    expect(stdout).toContain('Deleted');
+
+    expect(cli('get doomed DOOMED_KEY').status).toBe(1);
+    expect(cli('scan doomed').status).toBe(1); // project no longer registered
+  });
+});
+
+describe('CLI: portfolio', () => {
+  const PORTFOLIO_ROOT = path.join(TMP, 'portfolio-root');
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(PORTFOLIO_ROOT, 'proj-one'), { recursive: true });
+    fs.writeFileSync(path.join(PORTFOLIO_ROOT, 'proj-one', 'package.json'), JSON.stringify({ description: 'A test project' }));
+    fs.mkdirSync(path.join(PORTFOLIO_ROOT, 'proj-two'), { recursive: true });
+  });
+
+  it('generates a report covering every subdirectory', () => {
+    const { stdout, status } = cli(`portfolio --root=${PORTFOLIO_ROOT} --no-github --json`);
+    expect(status).toBe(0);
+    const report = JSON.parse(stdout);
+    expect(report.summary.total).toBe(2);
+    expect(report.projects.map((p: { name: string }) => p.name).sort()).toEqual(['proj-one', 'proj-two']);
+  });
+
+  it('picks up a description from package.json when no .devassets-catalog.json override exists', () => {
+    const { stdout } = cli(`portfolio --root=${PORTFOLIO_ROOT} --no-github --json`);
+    const report = JSON.parse(stdout);
+    const projOne = report.projects.find((p: { name: string }) => p.name === 'proj-one');
+    expect(projOne.description).toBe('A test project');
+  });
+
+  it('applies an optional .devassets-catalog.json override', () => {
+    fs.writeFileSync(path.join(PORTFOLIO_ROOT, '.devassets-catalog.json'), JSON.stringify({
+      'proj-two': { description: 'Overridden description', stage: 'archived', nextAction: 'Nothing — archived.' },
+    }));
+    const { stdout } = cli(`portfolio --root=${PORTFOLIO_ROOT} --no-github --json`);
+    const report = JSON.parse(stdout);
+    const projTwo = report.projects.find((p: { name: string }) => p.name === 'proj-two');
+    expect(projTwo.description).toBe('Overridden description');
+    expect(projTwo.stage).toBe('archived');
+  });
+});
+
 describe('CLI: verify', () => {
   it('verifies a manifest file', () => {
     const outPath = path.join(TMP, 'verify-manifest.yml');
