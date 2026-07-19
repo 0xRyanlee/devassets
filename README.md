@@ -209,7 +209,7 @@ devassets get _global VERCEL_TOKEN
 devassets list _global
 ```
 
-When you call `devassets get <project> <key>` for a project-specific key and it's not found, DevAssets automatically checks `_global` before falling back to other projects. The response includes `scope: "global"` or `scope: "project"` so you know where it came from.
+When you call `devassets get <project> <key>` for a project-specific key and it's not found, DevAssets automatically checks `_global` — and only `_global`, never another unrelated project's vault, even if the same key name happens to exist there too. The response includes `scope: "global"` or `scope: "project"` so you know where it came from.
 
 > `_global` is a reserved project ID — `devassets add-project` will reject it.
 
