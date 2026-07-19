@@ -183,9 +183,14 @@ export async function startMcpServer() {
       // omitted the auto-generated filename can't escape cwd via a crafted environment value.
       const outputPath = output_path ?? generateOutputPath(projectId, environment, format);
 
-      const result = exportManifest(checkResult, {
-        project: projectId, environment, format, encrypt, encryptFor: encrypt_for, outputPath,
-      });
+      let result;
+      try {
+        result = exportManifest(checkResult, {
+          project: projectId, environment, format, encrypt, encryptFor: encrypt_for, outputPath,
+        });
+      } catch (err) {
+        return textResult({ error: err instanceof Error ? err.message : String(err) });
+      }
 
       addAuditLog({ projectId, action: 'export', user: getCurrentUser(), timestamp: result.timestamp, details: { environment, format, encrypted: result.encrypted, via: 'mcp' }, result: 'success' });
 

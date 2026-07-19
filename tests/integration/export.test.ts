@@ -101,4 +101,18 @@ describe('exportManifest', () => {
     expect(result.content).toContain('# DevAssets Checklist');
     expect(result.content).toContain('- [x]');
   });
+
+  it('refuses to export when encrypt=true but no password is given, instead of silently writing plaintext', () => {
+    const checkResult = validateAssets(sampleAssets, 'legita', 'production');
+    expect(() => exportManifest(checkResult, {
+      project: 'legita', environment: 'production', format: 'manifest', encrypt: true,
+    })).toThrow(/encrypt-for/);
+  });
+
+  it('refuses an encryption password shorter than 8 characters', () => {
+    const checkResult = validateAssets(sampleAssets, 'legita', 'production');
+    expect(() => exportManifest(checkResult, {
+      project: 'legita', environment: 'production', format: 'manifest', encrypt: true, encryptFor: 'short',
+    })).toThrow(/8 characters/);
+  });
 });

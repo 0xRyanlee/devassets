@@ -108,3 +108,15 @@ describe('MCP server: devassets_export path handling', () => {
     fs.rmSync(outputPath, { force: true });
   });
 });
+
+describe('MCP server: devassets_export encryption guard', () => {
+  it('returns an error instead of writing plaintext when encrypt=true has no encrypt_for', async () => {
+    const result = await client.callTool({
+      name: 'devassets_export',
+      arguments: { project: 'mcpproject', environment: 'mcp-encrypt-test', format: 'manifest', encrypt: true },
+    });
+    const data = textOf(result);
+    expect(data.error).toContain('encrypt-for');
+    expect(data.outputPath).toBeUndefined();
+  });
+});

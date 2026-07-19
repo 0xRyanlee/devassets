@@ -186,6 +186,22 @@ describe('CLI: export', () => {
     expect(status).toBe(0);
     expect(stdout).toContain('# DevAssets Reference');
   });
+
+  it('--encrypt without --encrypt-for fails instead of writing plaintext', () => {
+    const outPath = path.join(TMP, 'should-not-exist.yml');
+    const { status, stderr } = cli(`export myproject --env=production --encrypt --output=${outPath}`);
+    expect(status).toBe(1);
+    expect(stderr).toContain('encrypt-for');
+    expect(fs.existsSync(outPath)).toBe(false);
+  });
+
+  it('--encrypt with --encrypt-for produces an encrypted file', () => {
+    const outPath = path.join(TMP, 'encrypted-manifest.yml');
+    const { status } = cli(`export myproject --env=production --encrypt --encrypt-for=a-real-password --output=${outPath}`);
+    expect(status).toBe(0);
+    const content = fs.readFileSync(outPath, 'utf-8');
+    expect(content).not.toContain('project: myproject');
+  });
 });
 
 describe('CLI: audit', () => {

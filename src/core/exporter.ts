@@ -29,6 +29,18 @@ export function buildManifestData(checkResult: CheckResult): Record<string, unkn
 }
 
 export function exportManifest(checkResult: CheckResult, options: ExportOptions): ExportResult {
+  // encrypt=true with no password used to silently fall through to a plaintext manifest (the
+  // `if (options.encrypt && options.encryptFor)` check below just skipped encryption). Both CLI
+  // and MCP go through this single function, so validating here covers both call sites.
+  if (options.encrypt) {
+    if (!options.encryptFor) {
+      throw new Error('--encrypt requires --encrypt-for <password> — refusing to write an unencrypted manifest');
+    }
+    if (options.encryptFor.length < 8) {
+      throw new Error('Encryption password must be at least 8 characters');
+    }
+  }
+
   const timestamp = new Date().toISOString();
   const data = buildManifestData(checkResult);
 
