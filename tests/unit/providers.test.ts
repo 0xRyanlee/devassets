@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import * as supabase from '../../src/integrations/providers/supabase.js';
 import * as gcloud from '../../src/integrations/providers/gcloud.js';
 import * as vercel from '../../src/integrations/providers/vercel.js';
@@ -59,6 +62,46 @@ describe('gcloud.resolve (offline)', () => {
   it('fails on garbage', async () => {
     const r = await gcloud.resolve('@@@not-json@@@');
     expect(r.valid).toBe(false);
+  });
+
+  it('reads a credential file path that falls inside the project directory', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-'));
+    const credPath = path.join(projectPath, 'service-account.json');
+    fs.writeFileSync(credPath, JSON.stringify({ client_email: 'sa@proj.iam.gserviceaccount.com', project_id: 'inside-proj' }));
+    try {
+      const r = await gcloud.resolve(credPath, { projectPath });
+      expect(r.valid).toBe(true);
+      expect(r.workspace).toBe('inside-proj');
+    } finally {
+      fs.rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a credential file path outside the project directory', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-project-'));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-outside-'));
+    const credPath = path.join(outsideDir, 'real-service-account.json');
+    fs.writeFileSync(credPath, JSON.stringify({ client_email: 'real@victim.iam.gserviceaccount.com', project_id: 'victim-proj' }));
+    try {
+      const r = await gcloud.resolve(credPath, { projectPath });
+      expect(r.valid).toBe(false);
+      expect(r.error).toContain('outside the project directory');
+    } finally {
+      fs.rmSync(projectPath, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a file path when no project context is given', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devassets-gcloud-nocontext-'));
+    const credPath = path.join(dir, 'service-account.json');
+    fs.writeFileSync(credPath, JSON.stringify({ client_email: 'x@y.iam', project_id: 'p' }));
+    try {
+      const r = await gcloud.resolve(credPath);
+      expect(r.valid).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

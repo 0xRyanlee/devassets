@@ -29,7 +29,7 @@ export async function resolveProjectIdentities(project: Project): Promise<Provid
       const RESOLVE_TIMEOUT_MS = 10_000;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const resolved = await Promise.race([
-        entry.resolve(value),
+        entry.resolve(value, { projectPath: project.path }),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => reject(new Error(`Provider API timeout after ${RESOLVE_TIMEOUT_MS / 1000}s`)), RESOLVE_TIMEOUT_MS);
         }),

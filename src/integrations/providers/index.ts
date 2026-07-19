@@ -9,7 +9,9 @@ import * as apple from './apple.js';
 interface ProviderEntry {
   provider: string;
   keyPattern: RegExp;
-  resolve: (value: string) => Promise<ResolvedIdentity>;
+  // context is currently only consumed by gcloud.resolve (to fence GOOGLE_APPLICATION_CREDENTIALS
+  // file-path reads to within the project being scanned); other providers ignore it.
+  resolve: (value: string, context?: { projectPath: string }) => Promise<ResolvedIdentity>;
 }
 
 // Order matters: more specific patterns first. First match per key name wins.
