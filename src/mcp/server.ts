@@ -27,6 +27,10 @@ function notFound(projectId: string) {
 }
 
 export async function startMcpServer() {
+  // Mirrors src/index.ts's CLI guard: if the MCP host disconnects mid-write (client process
+  // exited, pipe closed), stdout emits EPIPE — exit cleanly instead of an unhandled crash.
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') process.exit(0); });
+
   const server = new McpServer({
     name: 'devassets',
     version: VERSION,
@@ -133,10 +137,16 @@ export async function startMcpServer() {
       if (!project) return notFound(projectId);
 
       const { replaceAssets, upsertPaymentPlatform } = await import('../db/queries.js');
-      const scanResult = scanProject(projectId, project.path);
-      replaceAssets(projectId, scanResult.assets);
-      for (const platform of scanResult.detectedPlatforms) {
-        upsertPaymentPlatform({ projectId, name: platform, status: 'unconfigured' });
+      let scanResult;
+      try {
+        scanResult = scanProject(projectId, project.path);
+        replaceAssets(projectId, scanResult.assets);
+        for (const platform of scanResult.detectedPlatforms) {
+          upsertPaymentPlatform({ projectId, name: platform, status: 'unconfigured' });
+        }
+      } catch (err) {
+        addAuditLog({ projectId, action: 'scan', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { via: 'mcp', error: err instanceof Error ? err.message : String(err) }, result: 'failure' });
+        return textResult({ error: err instanceof Error ? err.message : String(err) });
       }
       addAuditLog({ projectId, action: 'scan', user: getCurrentUser(), timestamp: scanResult.scannedAt, details: { via: 'mcp', assetsFound: scanResult.assets.length }, result: 'success' });
 
@@ -189,6 +199,7 @@ export async function startMcpServer() {
           project: projectId, environment, format, encrypt, encryptFor: encrypt_for, outputPath,
         });
       } catch (err) {
+        addAuditLog({ projectId, action: 'export', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { environment, format, via: 'mcp', error: err instanceof Error ? err.message : String(err) }, result: 'failure' });
         return textResult({ error: err instanceof Error ? err.message : String(err) });
       }
 

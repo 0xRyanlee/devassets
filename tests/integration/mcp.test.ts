@@ -15,6 +15,7 @@ const CLI = path.resolve('./dist/index.js');
 const TMP = path.join(os.tmpdir(), 'devassets-mcp-test');
 const PROJECT_PATH = path.join(TMP, 'mcpproject');
 const PROJECT2_PATH = path.join(TMP, 'mcpproject2');
+const PROJECT3_PATH = path.join(TMP, 'mcpproject3-gonemissing');
 
 let client: Client;
 
@@ -32,9 +33,13 @@ beforeAll(async () => {
   fs.mkdirSync(PROJECT2_PATH, { recursive: true });
   fs.writeFileSync(path.join(PROJECT_PATH, '.env'), 'DATABASE_URL=postgres://x\n');
 
+  fs.mkdirSync(PROJECT3_PATH, { recursive: true });
+
   run('init');
   run(`add-project mcpproject --path=${PROJECT_PATH} --type=saas`);
   run(`add-project mcpproject2 --path=${PROJECT2_PATH} --type=saas`);
+  run(`add-project mcpproject3 --path=${PROJECT3_PATH} --type=saas`);
+  fs.rmSync(PROJECT3_PATH, { recursive: true, force: true }); // registered, but its path is now gone
 
   const transport = new StdioClientTransport({
     command: 'node',
@@ -118,5 +123,27 @@ describe('MCP server: devassets_export encryption guard', () => {
     const data = textOf(result);
     expect(data.error).toContain('encrypt-for');
     expect(data.outputPath).toBeUndefined();
+  });
+});
+
+describe('MCP server: failure-path audit logging', () => {
+  it('devassets_scan records result=failure when the project path no longer exists', async () => {
+    const result = await client.callTool({ name: 'devassets_scan', arguments: { project: 'mcpproject3' } });
+    expect(textOf(result).error).toBeDefined();
+
+    const audit = JSON.parse(execFileSync('node', [CLI, 'audit', 'mcpproject3', '--format=json'], { env: { ...process.env, HOME: TMP } }).toString());
+    const failureLog = audit.find((l: { action: string; result: string }) => l.action === 'scan' && l.result === 'failure');
+    expect(failureLog).toBeDefined();
+  });
+
+  it('devassets_export records result=failure on the same encryption-guard rejection', async () => {
+    await client.callTool({
+      name: 'devassets_export',
+      arguments: { project: 'mcpproject', environment: 'mcp-audit-failure-test', format: 'manifest', encrypt: true },
+    });
+    const audit = JSON.parse(execFileSync('node', [CLI, 'audit', 'mcpproject', '--format=json'], { env: { ...process.env, HOME: TMP } }).toString());
+    const failureLog = audit.find((l: { action: string; result: string; details?: { environment?: string } }) =>
+      l.action === 'export' && l.result === 'failure' && l.details?.environment === 'mcp-audit-failure-test');
+    expect(failureLog).toBeDefined();
   });
 });
