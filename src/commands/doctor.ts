@@ -1,10 +1,11 @@
 import chalk from 'chalk';
 import fs from 'fs';
 import { Listr } from 'listr2';
-import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser, getVaultSecretCounts } from '../db/queries.js';
-import { validateAssets } from '../core/validator.js';
+import { listProjects, getAssets, getPaymentPlatforms, getAuditLogs, replaceAssets, upsertPaymentPlatform, addAuditLog, getCurrentUser, getVaultSecretCounts, listVaultSecrets } from '../db/queries.js';
+import { validateAssets, assessApiKeyAge } from '../core/validator.js';
 import { scanProject } from '../core/scanner.js';
 import { logger } from '../utils/logger.js';
+import { suggestScope } from '../utils/constants.js';
 
 interface DoctorOptions {
   json?: boolean;
@@ -23,6 +24,7 @@ export interface DoctorReport {
   projects: ProjectHealth[];
   topRisks: TopRisk[];
   recentActivity: RecentActivity[];
+  crossProjectKeyReuse: KeyReuse[];
 }
 
 interface ProjectHealth {
@@ -41,6 +43,13 @@ interface TopRisk {
   level: string;
   asset: string;
   message: string;
+  suggestion?: string;
+}
+
+interface KeyReuse {
+  key: string;
+  projects: string[];
+  suggestion: string;
 }
 
 interface RecentActivity {
@@ -120,11 +129,19 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
   const projectHealths: ProjectHealth[] = [];
   const topRisks: TopRisk[] = [];
   const vaultCounts = getVaultSecretCounts();
+  const recentLogs: RecentActivity[] = [];
+  // key name -> set of project IDs that have a secret with that name (used for the cross-project
+  // reuse check below — populated in the same per-project loop that already fetches vault secrets
+  // for the age check, rather than a separate pass).
+  const keyOwners = new Map<string, Set<string>>();
 
   for (const project of projects) {
     const assets = getAssets(project.id);
     const result = validateAssets(assets, project.id, undefined, project.type);
-    const lastLog = getAuditLogs(project.id, 30)[0];
+    // Single 30-day query serves both lastScanned (most recent entry) and the 7-day recent
+    // activity feed (filtered in memory) — this used to be two independent queries per project.
+    const logs = getAuditLogs(project.id, 30);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     projectHealths.push({
       id: project.id,
@@ -134,11 +151,28 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
       missingCount: result.assets.missing,
       riskCount: result.risks.length,
       vaultSecretCount: vaultCounts[project.id] ?? 0,
-      lastScanned: lastLog?.timestamp,
+      lastScanned: logs[0]?.timestamp,
     });
+
+    let recentCount = 0;
+    for (const l of logs) {
+      if (Date.parse(l.timestamp) < sevenDaysAgo) break; // logs are DESC-sorted, so the rest are older still
+      if (recentCount >= 3) break; // preserve the original per-project cap
+      recentLogs.push({ project: project.id, action: l.action, timestamp: l.timestamp, result: l.result });
+      recentCount++;
+    }
 
     for (const risk of result.risks.slice(0, 2)) {
       topRisks.push({ project: project.id, level: risk.level, asset: risk.asset, message: risk.message });
+    }
+
+    for (const secret of listVaultSecrets(project.id)) {
+      const ageDays = Math.floor((Date.now() - Date.parse(secret.updatedAt)) / 86_400_000);
+      const ageRisk = assessApiKeyAge(ageDays, secret.key);
+      if (ageRisk) topRisks.push({ project: project.id, level: ageRisk.level, asset: ageRisk.asset, message: ageRisk.message, suggestion: ageRisk.suggestion });
+
+      if (!keyOwners.has(secret.key)) keyOwners.set(secret.key, new Set());
+      keyOwners.get(secret.key)!.add(project.id);
     }
   }
 
@@ -146,16 +180,18 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
     const order = { critical: 0, high: 1, medium: 2, low: 3 };
     return (order[a.level as keyof typeof order] ?? 4) - (order[b.level as keyof typeof order] ?? 4);
   });
+  recentLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-  const recentLogs = projects
-    .flatMap(p => getAuditLogs(p.id, 7).slice(0, 3).map(l => ({
-      project: p.id,
-      action: l.action,
-      timestamp: l.timestamp,
-      result: l.result,
-    })))
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    .slice(0, 10);
+  // A key name stored under 2+ distinct projects, where suggestScope doesn't consider it
+  // inherently per-project (DATABASE_URL etc. are expected to repeat), is a likely candidate for
+  // _global instead of being copy-pasted across projects — the exact CHANGELOG 1.15 incident.
+  const crossProjectKeyReuse: KeyReuse[] = [...keyOwners.entries()]
+    .filter(([key, owners]) => owners.size >= 2 && suggestScope(key) !== 'project-only')
+    .map(([key, owners]) => ({
+      key,
+      projects: [...owners].sort(),
+      suggestion: `${key} is duplicated across ${owners.size} projects — consider storing it once under _global: devassets set _global ${key}`,
+    }));
 
   return {
     generatedAt: now,
@@ -168,7 +204,8 @@ export function buildDoctorReport(projects: ReturnType<typeof listProjects>): Do
     },
     projects: projectHealths,
     topRisks: topRisks.slice(0, 10),
-    recentActivity: recentLogs,
+    recentActivity: recentLogs.slice(0, 10),
+    crossProjectKeyReuse,
   };
 }
 
@@ -218,6 +255,15 @@ function printDoctorReport(report: DoctorReport) {
       const icon = a.result === 'success' ? chalk.green('✓') : chalk.red('✗');
       const time = new Date(a.timestamp).toLocaleString();
       console.log(`  ${icon} ${chalk.gray(time)}  ${a.action.padEnd(10)}  ${chalk.gray(a.project)}`);
+    }
+    console.log('');
+  }
+
+  if (report.crossProjectKeyReuse.length > 0) {
+    console.log(chalk.bold('Cross-Project Key Reuse'));
+    for (const r of report.crossProjectKeyReuse) {
+      console.log(`  ${chalk.yellow('⚠')}  ${chalk.white(r.key)} ${chalk.gray(`(${r.projects.join(', ')})`)}`);
+      console.log(`     ${chalk.gray(r.suggestion)}`);
     }
     console.log('');
   }

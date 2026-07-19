@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateAssets } from '../../src/core/validator.js';
+import { validateAssets, assessApiKeyAge } from '../../src/core/validator.js';
 import type { Asset } from '../../src/types/index.js';
 
 function asset(name: string, status: Asset['status'], environment?: Asset['environment']): Asset {
@@ -64,5 +64,22 @@ describe('validateAssets — Axis C form-aware severity', () => {
     const result = validateAssets([asset('VERCEL_TOKEN', 'managed')], 'p', 'production', 'saas');
     expect(result.risks).toHaveLength(0);
     expect(result.assets.managed).toBe(1);
+  });
+});
+
+describe('assessApiKeyAge', () => {
+  it('returns null for a fresh key', () => {
+    expect(assessApiKeyAge(5, 'PADDLE_API_KEY')).toBeNull();
+  });
+
+  it('warns (medium) once past the 60-day threshold', () => {
+    const risk = assessApiKeyAge(65, 'PADDLE_API_KEY');
+    expect(risk?.level).toBe('medium');
+    expect(risk?.asset).toBe('PADDLE_API_KEY');
+  });
+
+  it('flags overdue (high) once past the 90-day threshold', () => {
+    const risk = assessApiKeyAge(95, 'PADDLE_API_KEY');
+    expect(risk?.level).toBe('high');
   });
 });

@@ -193,6 +193,30 @@ describe('CLI: doctor', () => {
     expect(report).toHaveProperty('projects');
     expect(report).toHaveProperty('topRisks');
     expect(report).toHaveProperty('recentActivity');
+    expect(report).toHaveProperty('crossProjectKeyReuse');
+  });
+
+  it('flags a global-candidate key duplicated across projects', () => {
+    const secondPath = path.join(TMP, 'myproject2');
+    fs.mkdirSync(secondPath, { recursive: true });
+    expect(cli(`add-project myproject2 --path=${secondPath} --type=saas`).status).toBe(0);
+    expect(cli('set myproject PADDLE_API_KEY pdl_live_shared').status).toBe(0);
+    expect(cli('set myproject2 PADDLE_API_KEY pdl_live_shared').status).toBe(0);
+
+    const { stdout } = cli('doctor --json');
+    const report = JSON.parse(stdout);
+    const reuse = report.crossProjectKeyReuse.find((r: { key: string }) => r.key === 'PADDLE_API_KEY');
+    expect(reuse).toBeDefined();
+    expect(reuse.projects).toEqual(expect.arrayContaining(['myproject', 'myproject2']));
+  });
+
+  it('does not flag a naturally per-project key (DATABASE_URL) as reuse', () => {
+    expect(cli('set myproject DATABASE_URL postgres://a').status).toBe(0);
+    expect(cli('set myproject2 DATABASE_URL postgres://b').status).toBe(0);
+
+    const { stdout } = cli('doctor --json');
+    const report = JSON.parse(stdout);
+    expect(report.crossProjectKeyReuse.find((r: { key: string }) => r.key === 'DATABASE_URL')).toBeUndefined();
   });
 
   it('summary counts are consistent', () => {
