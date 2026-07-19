@@ -109,6 +109,23 @@ describe('CLI: import', () => {
     expect(status).toBe(0);
     expect(stdout).toContain('0 added, 2 updated, 0 skipped');
   });
+
+  it('skips (does not silently repoint) a same-named directory under a different root', () => {
+    // importapp-a is already registered above with path = IMPORT_ROOT/importapp-a, which has a
+    // .env with DATABASE_URL. A second root with its own (env-file-less) "importapp-a"
+    // subdirectory must not overwrite that path — if it did, a re-scan would find zero assets
+    // instead of DATABASE_URL, since the new directory has no .env at all.
+    const OTHER_ROOT = path.join(TMP, 'import-root-other');
+    fs.mkdirSync(path.join(OTHER_ROOT, 'importapp-a'), { recursive: true });
+
+    const { stdout, status } = cli(`import --root=${OTHER_ROOT}`);
+    expect(status).toBe(0);
+    expect(stdout).toContain('0 added, 0 updated, 1 skipped');
+
+    const check = cli('check importapp-a --format=json');
+    const found = JSON.parse(check.stdout).categories.environmentVariables.some((a: { name: string }) => a.name === 'DATABASE_URL');
+    expect(found).toBe(true); // path is still IMPORT_ROOT/importapp-a, not silently repointed
+  });
 });
 
 describe('CLI: scan', () => {
@@ -527,11 +544,18 @@ describe('CLI: key-export / key-restore', () => {
 
     const { status: getStatus } = cli('get myproject KEY_BACKUP_TEST_SECRET --env=staging');
     expect(getStatus).toBe(0); // still decryptable — the failed restore never touched signature.key
+
+    const audit = JSON.parse(cli('audit _global --format=json').stdout);
+    expect(audit.some((l: { action: string; result: string }) => l.action === 'key-restore' && l.result === 'failure')).toBe(true);
   });
 
-  it('restores the exact same key, preserving access to previously-encrypted secrets', () => {
+  it('restores the exact same key, preserving access to previously-encrypted secrets, and logs it', () => {
     const { status } = cli(`key-restore ${BACKUP_PATH} --password=backup-password-123 --force`);
     expect(status).toBe(0);
+
+    const audit = JSON.parse(cli('audit _global --format=json').stdout);
+    expect(audit.some((l: { action: string; result: string }) => l.action === 'key-restore' && l.result === 'success')).toBe(true);
+    expect(audit.some((l: { action: string }) => l.action === 'key-export')).toBe(true);
 
     const { stdout, status: getStatus } = cli('get myproject KEY_BACKUP_TEST_SECRET --env=staging');
     expect(getStatus).toBe(0);

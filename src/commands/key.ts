@@ -3,6 +3,7 @@ import path from 'path';
 import { encryptAES, decryptAES } from '../utils/crypto.js';
 import { SIGNATURE_KEY_PATH } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
+import { addAuditLog, getCurrentUser } from '../db/queries.js';
 
 interface KeyExportOptions {
   encryptFor?: string;
@@ -37,6 +38,8 @@ export function keyExportCommand(options: KeyExportOptions) {
   } finally {
     fs.closeSync(fd);
   }
+
+  addAuditLog({ projectId: '_global', action: 'key-export', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { outputPath }, result: 'success' });
 
   logger.success(`Signature key backed up to ${outputPath}`);
   logger.raw('');
@@ -74,10 +77,12 @@ export function keyRestoreCommand(file: string, options: KeyRestoreOptions) {
   try {
     keyBytes = Buffer.from(decryptAES(encrypted, options.password), 'base64');
   } catch {
+    addAuditLog({ projectId: '_global', action: 'key-restore', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { file, error: 'decrypt failed' }, result: 'failure' });
     logger.error('Could not decrypt backup — wrong password, or the file is corrupted.');
     process.exit(1);
   }
   if (keyBytes.length !== 32) {
+    addAuditLog({ projectId: '_global', action: 'key-restore', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { file, error: 'unexpected key length' }, result: 'failure' });
     logger.error(`Decrypted key is ${keyBytes.length} bytes (expected 32) — backup file may be corrupted.`);
     process.exit(1);
   }
@@ -89,6 +94,8 @@ export function keyRestoreCommand(file: string, options: KeyRestoreOptions) {
   } finally {
     fs.closeSync(fd);
   }
+
+  addAuditLog({ projectId: '_global', action: 'key-restore', user: getCurrentUser(), timestamp: new Date().toISOString(), details: { file }, result: 'success' });
 
   logger.success('Signature key restored from backup.');
   logger.raw('  Vault secrets encrypted under this key are decryptable again.');

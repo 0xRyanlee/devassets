@@ -51,8 +51,13 @@ export function importCommand(options: ImportOptions) {
       continue;
     }
     const existing = getProject(id);
-    if (existing && existing.name !== entry.name && existing.path !== projectPath) {
-      results.push({ id, name: entry.name, action: 'skipped', reason: `id "${id}" already used by a different project — register manually with --id` });
+    // Path (not name) is the ground truth for "is this the same project being re-imported":
+    // two different roots can each have a subdirectory with the same folder name (both slugify
+    // to the same id) without being the same project. The old `&&`-of-both-differ check let a
+    // same-named-different-path collision silently overwrite the existing project's path —
+    // its vault secrets would stay under the same id but now point at the wrong directory.
+    if (existing && existing.path !== projectPath) {
+      results.push({ id, name: entry.name, action: 'skipped', reason: `id "${id}" already used by a different project (${existing.path}) — register manually with --id` });
       continue;
     }
 
